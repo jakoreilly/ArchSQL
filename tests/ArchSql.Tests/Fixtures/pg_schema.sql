@@ -1,0 +1,10 @@
+CREATE TABLE public.accounts (
+  id SERIAL PRIMARY KEY,
+  balance NUMERIC(18,2)
+);
+
+CREATE FUNCTION public.check_balance() RETURNS TRIGGER AS $$
+BEGIN
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;

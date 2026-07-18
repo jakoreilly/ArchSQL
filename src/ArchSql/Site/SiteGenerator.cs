@@ -3,6 +3,8 @@ using ArchSql.Model;
 using ArchSql.Rendering;
 using ArchSql.Site.Pages;
 
+using System.Reflection;
+
 namespace ArchSql.Site;
 
 /// <summary>Orchestrates static-site output: one WritePage call per page, copies ArchDiagram's
@@ -14,6 +16,7 @@ public static class SiteGenerator
     public static string? Generate(SqlModel model, string outDir, int maxNodes)
     {
         Directory.CreateDirectory(outDir);
+        CopyAssetTree(outDir);
         var ctx = SiteContext.Build(model);
 
         WritePage(outDir, "index.html", "Overview", model, "index.html", "", PageTemplate.Crumbs((null, "Overview")), IndexPage.Body(ctx));
@@ -43,5 +46,25 @@ public static class SiteGenerator
     {
         var html = PageTemplate.Render(title, model.RootName, activeHref, relRoot, crumbs, body);
         File.WriteAllText(Path.Combine(outDir, fileName), html, Utf8NoBom);
+    }
+
+    private static void CopyAssetTree(string outDir)
+    {
+        var baseDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+        if (baseDir is null) { return; }
+
+        var sourceAssetsDir = Path.Combine(baseDir, "assets");
+        if (!Directory.Exists(sourceAssetsDir)) { return; }
+
+        var targetAssetsDir = Path.Combine(outDir, "assets");
+        Directory.CreateDirectory(targetAssetsDir);
+
+        foreach (var file in Directory.GetFiles(sourceAssetsDir, "*", SearchOption.AllDirectories))
+        {
+            var rel = Path.GetRelativePath(sourceAssetsDir, file);
+            var target = Path.Combine(targetAssetsDir, rel);
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(file, target, overwrite: true);
+        }
     }
 }

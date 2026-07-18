@@ -3,9 +3,9 @@
 > Turn a folder of SQL scripts into a beautiful, searchable architecture website.
 
 ArchSql is a .NET 10 command-line tool that scans a folder of `.sql` files — schema dumps,
-migrations, stored-procedure scripts — and produces a fully offline, static HTML site: a
-foreign-key ER diagram, an object dependency graph, a SonarQube-style lint report, and a health
-scorecard. It never connects to a database; it only reads the files you point it at.
+migrations, stored-procedure scripts, and other database artifacts — and produces a fully offline,
+static HTML site with an ER diagram, dependency graph, lint findings, and a health scorecard. It
+never connects to a database; it only reads the files you point it at.
 
 **v1 scope:** T-SQL (SQL Server) is deep-parsed via
 [ScriptDom](https://www.nuget.org/packages/Microsoft.SqlServer.TransactSql.ScriptDom). MySQL and
@@ -66,7 +66,9 @@ dotnet test tests/ArchSql.Tests/ArchSql.Tests.csproj
 
 ## Project status
 
-ArchSql is a working prototype for SQL schema analysis and static-site generation. It is suitable for experimentation and internal use, and it is being prepared for broader public sharing.
+ArchSql is a working prototype for SQL schema analysis and static-site generation. It is already
+usable for local experimentation, documentation, and architecture review, and it is being refined
+for broader public sharing and community feedback.
 
 ## Contributing
 

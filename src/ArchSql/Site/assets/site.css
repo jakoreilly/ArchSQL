@@ -84,7 +84,7 @@ h2 { font-size: 1.15rem; margin: 1.75rem 0 .6rem; }
 /* ---- Cards, tiles ---- */
 .panel { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); padding: 1rem 1.25rem; }
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: .75rem; margin: 1rem 0 1.5rem; }
-.tile { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); padding: .8rem 1rem; }
+.tile { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); padding: .8rem 1rem; overflow-wrap: anywhere; }
 .tile .num { font-size: 1.5rem; font-weight: 700; }
 .tile .lbl { font-size: .78rem; color: var(--text-soft); text-transform: uppercase; letter-spacing: .05em; }
 
@@ -102,6 +102,13 @@ h2 { font-size: 1.15rem; margin: 1.75rem 0 .6rem; }
 
 /* ---- Landscape layer filters ---- */
 .tile.tile-zero { opacity: .5; }
+
+/* ---- Activity heat-map: dense, wrapping tiles sized to the label, not fixed 150px ---- */
+.heat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: .5rem; margin: .5rem 0 1.5rem; }
+.heat-tile { display: flex; flex-direction: column; gap: .2rem; min-width: 0; padding: .5rem .6rem; border: 1px solid var(--border); border-radius: 8px; color: var(--text); text-decoration: none; transition: outline .1s; }
+.heat-tile:hover { outline: 2px solid var(--accent); }
+.heat-name { font-size: .74rem; line-height: 1.25; overflow-wrap: anywhere; word-break: break-word; }
+.heat-count { font-size: .82rem; font-weight: 700; }
 a.tile { color: inherit; text-decoration: none; display: block; transition: border-color .15s, box-shadow .15s; }
 a.tile:hover { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .landscape-filters {

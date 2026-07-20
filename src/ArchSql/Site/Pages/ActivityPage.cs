@@ -83,7 +83,7 @@ page, reconnect with a login that has <code>VIEW DATABASE STATE</code>.</p>
         sb.Append("<h2>Heat-map</h2>");
         sb.Append("""<p class="note">Tile shade tracks execution volume (log-scaled). Darker = hotter.</p>""");
         var max = rt.ObjectStats.Max(s => s.ExecutionCount);
-        sb.Append("""<div class="tiles">""");
+        sb.Append("""<div class="heat-grid">""");
         foreach (var s in rt.ObjectStats)
         {
             var obj = ctx.ById.GetValueOrDefault(s.ObjectId);
@@ -91,9 +91,9 @@ page, reconnect with a login that has <code>VIEW DATABASE STATE</code>.</p>
             var bucket = Bucket(s.ExecutionCount, max);
             // Bucket 0..4 -> alpha 0.15..0.85 over a fixed hue that reads on both themes.
             var alpha = (0.15 + bucket * 0.175).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
-            var style = $"background:rgba(220,80,40,{alpha});border-color:rgba(220,80,40,0.9)";
+            var style = $"background:rgba(220,80,40,{alpha})";
             var href = obj is null ? "#" : $"object.html?id={Uri.EscapeDataString(obj.Id)}";
-            sb.Append($"""<a class="tile" href="{href}" style="{style}" title="{Html.Encode(label)}: {s.ExecutionCount:N0} executions">{Html.Encode(label)}<br><small>{s.ExecutionCount:N0}</small></a>""");
+            sb.Append($"""<a class="heat-tile" href="{href}" style="{style}" title="{Html.Encode(label)}: {s.ExecutionCount:N0} executions"><span class="heat-name">{Html.Encode(label)}</span><span class="heat-count">{s.ExecutionCount:N0}</span></a>""");
         }
         sb.Append("</div>");
     }

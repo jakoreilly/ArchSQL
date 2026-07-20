@@ -1200,6 +1200,27 @@
     // recenter updates what clicks resolve against — the closure is bound once, but reads this
     // field fresh on every click.
     card._archTokenMap = built.token;
+
+    // Adjacency (token -> neighbour tokens, both directions) drives the shared hover-highlight in
+    // attachTooltips. Without it, hovering a node dims every other node (including its neighbours),
+    // which reads as "the target nodes disappeared". Injected as the card's <script.adjacency> so
+    // attachTooltips picks it up when the card re-renders.
+    var adjacency = {};
+    nb.edges.forEach(function (e) {
+      var s = built.token[e.source], t = built.token[e.target];
+      if (!s || !t) { return; }
+      (adjacency[s] = adjacency[s] || []).push(t);
+      (adjacency[t] = adjacency[t] || []).push(s);
+    });
+    var adjEl = card.querySelector("script.adjacency");
+    if (!adjEl) {
+      adjEl = document.createElement("script");
+      adjEl.className = "adjacency";
+      adjEl.type = "application/json";
+      card.appendChild(adjEl);
+    }
+    adjEl.textContent = JSON.stringify(adjacency);
+
     window.ArchViewer.rerenderCard(card);
 
     // Recenter on node click via event delegation (survives re-renders; bound once per card).
@@ -1364,9 +1385,12 @@
     }
 
     function applyPagination() {
+      // With no page size the table isn't paginated; leave row visibility alone so a co-located
+      // filter (.filter-input) that hides non-matching rows is not overridden on sort.
+      if (pageSize <= 0) { return; }
       var all = rows();
       all.forEach(function (tr, i) {
-        tr.style.display = (showingAll || pageSize <= 0 || i < pageSize) ? "" : "none";
+        tr.style.display = (showingAll || i < pageSize) ? "" : "none";
       });
       var more = table.parentNode.querySelector(".table-more[data-for='" + table.id + "']");
       if (pageSize > 0 && all.length > pageSize) {

@@ -18,15 +18,16 @@ public static class ObjectsPage
             return sb.ToString();
         }
 
-        sb.Append("""<input class="filter-input" type="search" id="objects-filter" placeholder="Filter by name…" autocomplete="off" spellcheck="false">""");
-        sb.Append("""<table class="grid" id="objects-table"><tr><th>Schema</th><th>Name</th><th>Kind</th><th>PK?</th><th>Columns</th><th>Fan-in</th><th>Fan-out</th><th>Purpose</th><th>File</th></tr>""");
+        sb.Append("""<input class="filter-input" type="search" data-filter-target="#objects-tbody" placeholder="Filter by schema, name or kind…" autocomplete="off" spellcheck="false"> <span class="filter-count"></span>""");
+        sb.Append("""<table class="grid sortable" id="objects-table"><thead><tr><th>Schema</th><th>Name</th><th>Kind</th><th>PK?</th><th>Columns</th><th>Fan-in</th><th>Fan-out</th><th>Purpose</th><th>File</th></tr></thead><tbody id="objects-tbody">""");
         foreach (var o in model.Objects.OrderBy(o => o.Schema, StringComparer.OrdinalIgnoreCase).ThenBy(o => o.Name, StringComparer.OrdinalIgnoreCase))
         {
             var pkBadge = o.Kind != "table" ? "" : o.PrimaryKey.Count > 0 ? """<span class="badge ok">Yes</span>""" : """<span class="badge warn">No</span>""";
             var file = ctx.BySlug.GetValueOrDefault(o.DefinedInSlug);
             var shallow = file is { ParsedCleanly: false } ? """ <span class="badge" title="Shallow parse">shallow</span>""" : "";
+            var search = $"{o.Schema}.{o.Name} {o.Kind}".ToLowerInvariant();
             sb.Append($"""
-<tr data-test="{(file?.RelPath.Contains("test", StringComparison.OrdinalIgnoreCase) == true ? "1" : "0")}">
+<tr class="filterable" data-search="{Html.Encode(search)}">
 <td>{Html.Encode(o.Schema)}</td>
 <td><a href="object.html?id={Uri.EscapeDataString(o.Id)}">{Html.Encode(o.Name)}</a>{shallow}</td>
 <td>{Html.Encode(o.Kind)}</td>
@@ -39,7 +40,7 @@ public static class ObjectsPage
 </tr>
 """);
         }
-        sb.Append("</table>");
+        sb.Append("</tbody></table>");
         return sb.ToString();
     }
 }

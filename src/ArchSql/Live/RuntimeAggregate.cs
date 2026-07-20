@@ -70,7 +70,9 @@ public static class RuntimeAggregate
         var note = $"{objectStats.Count} object(s) with execution stats, {missingIndexes.Count} missing-index "
             + $"suggestion(s), {unusedCount} unused index(es). {VolatilityNote}";
 
-        return new RuntimeStats
+        // Two catalog/DMV rows can normalize to the same id on a messy schema; collapse them so
+        // downstream id-keyed lookups never see a duplicate.
+        return ModelNormalizer.DedupeRuntime(new RuntimeStats
         {
             Source = "live-mssql",
             Available = true,
@@ -78,7 +80,7 @@ public static class RuntimeAggregate
             ObjectStats = objectStats,
             IndexStats = indexStats,
             MissingIndexes = missingIndexes,
-        };
+        });
     }
 
     private static string Id(string schema, string name) => IdentifierRules.NormalizeId(schema, name, "tsql");

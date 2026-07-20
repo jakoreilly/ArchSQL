@@ -1,3 +1,4 @@
+using ArchSql.Analysis;
 using ArchSql.Model;
 
 namespace ArchSql.Rendering;
@@ -19,6 +20,11 @@ public static class ModelUpgrader
         // v0/v1 -> v2 added Crud; v2 -> v3 added Runtime. Both are default-initialized on
         // deserialize (Crud to [], Runtime to an empty RuntimeStats with Available=false), so
         // nothing needs backfilling — stamp the version forward.
-        return model.SchemaVersion == SchemaVersions.Current ? model : model with { SchemaVersion = SchemaVersions.Current };
+        var upgraded = model.SchemaVersion == SchemaVersions.Current ? model : model with { SchemaVersion = SchemaVersions.Current };
+
+        // A loaded model.json may carry duplicate object ids or runtime keys (an older build, a
+        // hand-edited file, or a brownfield export). Normalize so the --from-model path is as
+        // resilient as a fresh scan and every id-keyed consumer downstream stays safe.
+        return ModelNormalizer.Normalize(upgraded);
     }
 }

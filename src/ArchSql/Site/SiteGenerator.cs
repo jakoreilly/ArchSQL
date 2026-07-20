@@ -18,7 +18,10 @@ public static class SiteGenerator
         Directory.CreateDirectory(outDir);
         CopyAssetTree(outDir);
         var ctx = SiteContext.Build(model);
-        var searchIndexHtml = SearchIndex.ScriptTag(model);
+        // Write the search index once as a shared asset; every page references it by src (O(pages)
+        // bytes instead of inlining the whole index into each page).
+        SearchIndex.WriteAsset(model, outDir);
+        var searchIndexHtml = SearchIndex.ScriptSrc("");
 
         WritePage(outDir, "index.html", "Overview", model, "index.html", "", PageTemplate.Crumbs((null, "Overview")), IndexPage.Body(ctx), searchIndexHtml);
         WritePage(outDir, "guide.html", "Guide", model, "guide.html", "", PageTemplate.Crumbs((null, "Guide")), GuidePage.Body(ctx), searchIndexHtml);
@@ -34,10 +37,11 @@ public static class SiteGenerator
         WritePage(outDir, "config.html", "Config & Secrets", model, "config.html", "", PageTemplate.Crumbs((null, "Config & Secrets")), ConfigPage.Body(ctx), searchIndexHtml);
 
         Directory.CreateDirectory(Path.Combine(outDir, "files"));
+        var fileSearchIndexHtml = SearchIndex.ScriptSrc("../");
         foreach (var file in model.Files)
         {
             var crumbs = PageTemplate.Crumbs(("../objects.html", "Objects"), (null, file.RelPath));
-            var html = PageTemplate.Render(file.RelPath, model.RootName, "", "../", crumbs, ObjectFilePage.Body(ctx, file), searchIndexHtml);
+            var html = PageTemplate.Render(file.RelPath, model.RootName, "", "../", crumbs, ObjectFilePage.Body(ctx, file), fileSearchIndexHtml);
             File.WriteAllText(Path.Combine(outDir, "files", file.Slug + ".html"), html, Utf8NoBom);
         }
 

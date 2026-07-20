@@ -72,6 +72,11 @@ internal sealed class TSqlFactsVisitor(string relPath) : TSqlFragmentVisitor
     {
         _statementCount++;
         var (schema, name) = SplitSchemaObjectName(node.SchemaObjectName);
+        // Temp tables (#name, ##name) and table variables are session-local, not schema objects.
+        // They are declared inside procedure bodies and reuse common names (#tmp, #tmpdeleted), so
+        // emitting them would both pollute the inventory and collide when two modules use the same
+        // name — the resolver keys objects by id and cannot hold duplicates.
+        if (name.Length == 0 || IsTempOrVariable(name)) { return; }
         var id = IdentifierRules.NormalizeId(schema, name, "tsql");
         var columns = new List<Column>();
         var pk = new List<string>();

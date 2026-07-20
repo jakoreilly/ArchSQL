@@ -63,6 +63,24 @@ public class Phase12_LiveSchemaTests
     }
 
     [Fact]
+    public void Analyzer_TempTableInProcedureBodyIsNotEmittedAsAnObject()
+    {
+        // Temp tables are session-local. Two procedures reusing the same temp-table name (very
+        // common: #tmpdeleted, #tmp) must not each produce a dbo.#... object, or the resolver's
+        // id-keyed dictionary collides — which is what a real database surfaced.
+        const string proc = """
+            CREATE PROCEDURE dbo.usp_a AS
+            BEGIN
+                CREATE TABLE #tmpdeleted (Id INT);
+                INSERT INTO #tmpdeleted (Id) VALUES (1);
+            END
+            """;
+        var facts = new TSqlScriptDomAnalyzer().Analyze("live/dbo.usp_a", proc);
+        Assert.DoesNotContain(facts.Objects, o => o.Id.Contains("#tmpdeleted"));
+        Assert.Contains(facts.Objects, o => o.Id == "dbo.usp_a");
+    }
+
+    [Fact]
     public void RuntimeAggregate_UnavailableProducesEmptyStatsWithReason()
     {
         var stats = RuntimeAggregate.Build([], [], [], available: false, "no permission");

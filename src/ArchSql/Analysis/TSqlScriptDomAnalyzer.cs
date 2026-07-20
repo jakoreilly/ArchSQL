@@ -63,10 +63,28 @@ internal sealed class TSqlFactsVisitor(string relPath) : TSqlFragmentVisitor
         if (idents.Count == 0) { return ("", ""); }
         var name = idents[^1].Value;
         var schema = idents.Count >= 2 ? idents[^2].Value : "";
+        // Default the schema for display when the statement left it unqualified. T-SQL resolves
+        // unqualified objects to dbo, and NormalizeId already keys the id under dbo, so populating
+        // Schema here keeps display ("schema.name") consistent with the id and avoids a leading-dot
+        // label like ".MyProc". Only default a real object name (not a temp table / empty).
+        if (schema.Length == 0 && name.Length > 0 && name[0] != '#' && name[0] != '@') { schema = "dbo"; }
         return (schema, name);
     }
 
     private static int LineOf(TSqlFragment fragment) => fragment.StartLine;
+
+    /// <summary>The verbatim source text of a fragment, reconstructed from its token span. Used to
+    /// score cyclomatic complexity of procedure/function/trigger bodies without storing the full
+    /// body text on the model (which would bloat model.json for large databases).</summary>
+    private static string SourceOf(TSqlFragment node)
+    {
+        var stream = node.ScriptTokenStream;
+        if (stream is null || node.FirstTokenIndex < 0 || node.LastTokenIndex < 0) { return ""; }
+        var last = Math.Min(node.LastTokenIndex, stream.Count - 1);
+        var parts = new List<string>();
+        for (var i = node.FirstTokenIndex; i <= last; i++) { parts.Add(stream[i].Text); }
+        return string.Concat(parts);
+    }
 
     public override void Visit(CreateTableStatement node)
     {
@@ -171,7 +189,7 @@ internal sealed class TSqlFactsVisitor(string relPath) : TSqlFragmentVisitor
         _objects.Add(new DbObject
         {
             Id = id, Schema = schema, Name = name, Kind = "procedure", Dialect = "tsql",
-            DefinedInSlug = relPath, DefinedAtLine = LineOf(node),
+            DefinedInSlug = relPath, DefinedAtLine = LineOf(node), Cyclomatic = SqlMetrics.Cyclomatic(SourceOf(node)),
         });
         WithCurrentObject(id, () =>
         {
@@ -187,7 +205,7 @@ internal sealed class TSqlFactsVisitor(string relPath) : TSqlFragmentVisitor
         _objects.Add(new DbObject
         {
             Id = id, Schema = schema, Name = name, Kind = "function", Dialect = "tsql",
-            DefinedInSlug = relPath, DefinedAtLine = LineOf(node),
+            DefinedInSlug = relPath, DefinedAtLine = LineOf(node), Cyclomatic = SqlMetrics.Cyclomatic(SourceOf(node)),
         });
         WithCurrentObject(id, () => node.AcceptChildren(this));
     }
@@ -195,12 +213,12 @@ internal sealed class TSqlFactsVisitor(string relPath) : TSqlFragmentVisitor
     public override void ExplicitVisit(CreateTriggerStatement node)
     {
         _statementCount++;
-        var name = node.Name?.BaseIdentifier?.Value ?? "";
-        var id = IdentifierRules.NormalizeId("", name, "tsql");
+        var (schema, name) = node.Name is not null ? SplitSchemaObjectName(node.Name) : ("dbo", "");
+        var id = IdentifierRules.NormalizeId(schema, name, "tsql");
         _objects.Add(new DbObject
         {
-            Id = id, Schema = "", Name = name, Kind = "trigger", Dialect = "tsql",
-            DefinedInSlug = relPath, DefinedAtLine = LineOf(node),
+            Id = id, Schema = schema, Name = name, Kind = "trigger", Dialect = "tsql",
+            DefinedInSlug = relPath, DefinedAtLine = LineOf(node), Cyclomatic = SqlMetrics.Cyclomatic(SourceOf(node)),
         });
         WithCurrentObject(id, () =>
         {

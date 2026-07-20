@@ -99,6 +99,7 @@ h2 { font-size: 1.15rem; margin: 1.75rem 0 .6rem; }
 .badge.accent { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
 .badge.warn { background: color-mix(in srgb, var(--warn) 15%, transparent); color: var(--warn); border-color: transparent; }
 .badge.ok { background: color-mix(in srgb, var(--ok) 15%, transparent); color: var(--ok); border-color: transparent; }
+.badge.danger { background: color-mix(in srgb, var(--danger) 18%, transparent); color: var(--danger); border-color: transparent; }
 
 /* ---- Landscape layer filters ---- */
 .tile.tile-zero { opacity: .5; }

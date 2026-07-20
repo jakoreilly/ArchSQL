@@ -150,7 +150,9 @@ public static class Pipeline
     private static SqlModel ApplyPurposeAndComplexity(SqlModel model)
     {
         var objects = model.Objects
-            .Select(o => o with { Cyclomatic = SqlMetrics.Cyclomatic(o.Body) })
+            // Procedures/functions/triggers get their complexity from the analyzer (which has the
+            // token source); views/others fall back to scoring their stored Body here.
+            .Select(o => o with { Cyclomatic = o.Cyclomatic > 0 ? o.Cyclomatic : SqlMetrics.Cyclomatic(o.Body) })
             .ToList();
 
         var objectsBySlug = objects.ToLookup(o => o.DefinedInSlug, StringComparer.Ordinal);

@@ -27,6 +27,10 @@ public static class SiteGenerator
         // graph-data.js/object-detail.js must load before assets/site.js (whose IIFEs read the
         // payload synchronously at parse time), so they are appended to the same pre-site.js slot.
         var graphPayloadScripts = searchIndexHtml + GraphData.ScriptSrc("") + ObjectDetailData.ScriptSrc("");
+        // The 3D graph page additionally loads the vendored WebGL bundle and its controller, after
+        // the payload (graph3d.js reads window.ARCH_QUERY at parse time).
+        var graph3dScripts = graphPayloadScripts
+            + "<script src=\"assets/lib/3d-force-graph.min.js\"></script><script src=\"assets/graph3d.js\"></script>";
 
         WritePage(outDir, "index.html", "Overview", model, "index.html", "", PageTemplate.Crumbs((null, "Overview")), IndexPage.Body(ctx), searchIndexHtml);
         WritePage(outDir, "guide.html", "Guide", model, "guide.html", "", PageTemplate.Crumbs((null, "Guide")), GuidePage.Body(ctx), searchIndexHtml);
@@ -34,6 +38,7 @@ public static class SiteGenerator
         WritePage(outDir, "objects.html", "Objects", model, "objects.html", "", PageTemplate.Crumbs((null, "Objects")), ObjectsPage.Body(ctx), searchIndexHtml);
         WritePage(outDir, "er.html", "ER Diagram", model, "er.html", "", PageTemplate.Crumbs((null, "ER Diagram")), ErPage.Body(ctx, maxNodes), searchIndexHtml);
         WritePage(outDir, "dependencies.html", "Dependencies", model, "dependencies.html", "", PageTemplate.Crumbs((null, "Dependencies")), DependenciesPage.Body(ctx, maxNodes), searchIndexHtml);
+        WritePage(outDir, "graph.html", "3D Graph", model, "graph.html", "", PageTemplate.Crumbs((null, "3D Graph")), GraphPage.Body(ctx), graph3dScripts);
         WritePage(outDir, "crud.html", "CRUD Matrix", model, "crud.html", "", PageTemplate.Crumbs((null, "CRUD Matrix")), Pages.CrudPage.Body(ctx), searchIndexHtml);
         WritePage(outDir, "impact.html", "Impact", model, "impact.html", "", PageTemplate.Crumbs((null, "Impact")), Pages.ImpactPage.Body(ctx), searchIndexHtml);
         WritePage(outDir, "lint.html", "Lint", model, "lint.html", "", PageTemplate.Crumbs((null, "Lint")), LintPage.Body(ctx), searchIndexHtml);

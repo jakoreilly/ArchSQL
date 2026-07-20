@@ -30,7 +30,11 @@ public static class ImpactGraph
             var kind = fk.OnDelete.Contains("Cascade", StringComparison.OrdinalIgnoreCase) ? "fk-cascade" : "fk";
             edges.Add(new Edge(fk.FromObjectId, fk.ToObjectId, kind));
         }
+        // Distinct by (From, To, Kind): one object legitimately produces the same dependency many
+        // times (e.g. a proc reads a table in several statements), but a repeated reverse edge just
+        // inflates the blast-radius list and duplicates rows in the impact table.
         return edges
+            .DistinctBy(e => (e.From, e.To, e.Kind))
             .GroupBy(e => e.To, StringComparer.Ordinal)
             .ToDictionary(g => g.Key,
                 g => g.OrderBy(e => e.From, StringComparer.Ordinal).ThenBy(e => e.Kind, StringComparer.Ordinal).ToList(),

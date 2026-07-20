@@ -9,11 +9,13 @@ public static class IndexPage
         var model = ctx.Model;
         var sb = new StringBuilder();
         sb.Append("<h1>Overview</h1>");
+        var sourceSentence = model.Runtime.Source == "live-mssql"
+            ? "It was built from a read-only connection to a live SQL Server (schema from catalog views; runtime figures on the <a href=\"activity.html\">Activity</a> page from DMVs)."
+            : "It was built by scanning the .sql files — no database was connected.";
         sb.Append($"""
 <p class="lede">This site is a fully-offline architecture map of the SQL in {Html.Encode(model.RootName)}.
-It was built by scanning the .sql files — no database was connected. Tables, views, procedures
-and their foreign-key and dependency links are below, alongside a lint report and a health
-scorecard. Everything works from file:// with no network.</p>
+{sourceSentence} Tables, views, procedures and their foreign-key and dependency links are below,
+alongside a lint report and a health scorecard. Everything works from file:// with no network.</p>
 """);
 
         sb.Append("""
@@ -58,8 +60,8 @@ shows what writes each table; <a href="impact.html">Impact</a> shows what breaks
         var overallBadge = ctx.Scorecard.Overall switch
         {
             Analysis.SqlScorecard.Status.Ok => "badge ok",
-            Analysis.SqlScorecard.Status.Watch => "badge",
-            _ => "badge warn",
+            Analysis.SqlScorecard.Status.Watch => "badge warn",
+            _ => "badge danger",
         };
         sb.Append($"<h2>Overall grade <span class=\"{overallBadge}\">{ctx.Scorecard.Overall}</span></h2>");
         sb.Append("<p class=\"note\"><a href=\"scorecard.html\">See the full scorecard</a> for every metric.</p>");

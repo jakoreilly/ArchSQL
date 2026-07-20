@@ -27,8 +27,8 @@ public static class ScorecardPage
     private static string Badge(SqlScorecard.Status status) => status switch
     {
         SqlScorecard.Status.Ok => """<span class="badge ok">Ok</span>""",
-        SqlScorecard.Status.Watch => """<span class="badge">Watch</span>""",
-        SqlScorecard.Status.Fail => """<span class="badge warn">Fail</span>""",
+        SqlScorecard.Status.Watch => """<span class="badge warn">Watch</span>""",
+        SqlScorecard.Status.Fail => """<span class="badge danger">Fail</span>""",
         _ => """<span class="badge">N/A</span>""",
     };
 }

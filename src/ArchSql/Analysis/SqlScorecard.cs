@@ -84,6 +84,6 @@ public static class SqlScorecard
         var status = ratio <= 0.10 ? Status.Ok : ratio <= 0.30 ? Status.Watch : Status.Fail;
         return new Row("Dead / unreferenced objects", $"{dead}/{candidates}", status,
             $"{dead} of {candidates} procedure(s)/function(s)/trigger(s) are unreferenced in this scan.",
-            "Confirm still-called from application code, or remove.", "hotspots.html");
+            "Confirm still-called from application code, or remove.", "objects.html");
     }
 }

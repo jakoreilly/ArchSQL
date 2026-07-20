@@ -6,7 +6,7 @@ public static class LintPage
 {
     private static readonly (string Label, string Cls)[] SeverityBand =
     [
-        ("Critical", "badge warn"),
+        ("Critical", "badge danger"),
         ("High", "badge warn"),
         ("Medium", "badge"),
         ("Low", "badge ok"),

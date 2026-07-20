@@ -36,6 +36,14 @@ page, reconnect with a login that has <code>VIEW DATABASE STATE</code>.</p>
         }
 
         sb.Append($"""<p class="note">{Html.Encode(rt.Note)}</p>""");
+        var hotCount = rt.ObjectStats.Count > 0 ? rt.ObjectStats.Count(s => s.ExecutionCount >= HotThreshold(rt.ObjectStats)) : 0;
+        var missingCount = rt.MissingIndexes.Count;
+        var unusedCount = rt.IndexStats.Count(i => i.IsUnused);
+        sb.Append("<div class=\"tiles\">");
+        sb.Append($"""<div class="tile{(hotCount == 0 ? " tile-zero" : "")}"><div class="num">{hotCount:N0}</div><div class="lbl">Hot objects</div></div>""");
+        sb.Append($"""<div class="tile{(missingCount == 0 ? " tile-zero" : "")}"><div class="num">{missingCount:N0}</div><div class="lbl">Missing indexes</div></div>""");
+        sb.Append($"""<div class="tile{(unusedCount == 0 ? " tile-zero" : "")}"><div class="num">{unusedCount:N0}</div><div class="lbl">Unused indexes</div></div>""");
+        sb.Append("</div>");
         AppendHotspots(sb, ctx, rt);
         AppendHeatMap(sb, ctx, rt);
         AppendIndexIssues(sb, ctx, rt);
@@ -53,12 +61,12 @@ page, reconnect with a login that has <code>VIEW DATABASE STATE</code>.</p>
         }
         var hotThreshold = HotThreshold(rt.ObjectStats);
         sb.Append("""<input class="filter-input" type="search" data-filter-target="#activity-rows" placeholder="Filter by object…" autocomplete="off" spellcheck="false"> <span class="filter-count"></span>""");
-        sb.Append("""<table class="grid"><tr><th>Object</th><th>Executions</th><th>Logical reads</th><th>CPU (ms)</th><th></th></tr><tbody id="activity-rows">""");
+        sb.Append("""<table class="grid sortable" data-page-size="20"><thead><tr><th>Object</th><th>Executions</th><th>Logical reads</th><th>CPU (ms)</th><th></th></tr></thead><tbody id="activity-rows">""");
         foreach (var s in rt.ObjectStats)
         {
             var obj = ctx.ById.GetValueOrDefault(s.ObjectId);
             var label = obj is null ? s.ObjectId : $"{obj.Schema}.{obj.Name}";
-            var cell = obj is null ? Html.Encode(label) : $"""<a href="files/{Html.Encode(obj.DefinedInSlug)}.html">{Html.Encode(label)}</a>""";
+            var cell = obj is null ? Html.Encode(label) : $"""<a href="object.html?id={Uri.EscapeDataString(obj.Id)}">{Html.Encode(label)}</a>""";
             var hot = s.ExecutionCount >= hotThreshold ? """<span class="badge accent">hot</span>""" : "";
             sb.Append($"""
 <tr class="filterable" data-search="{Html.Encode(label.ToLowerInvariant())}">
@@ -84,7 +92,7 @@ page, reconnect with a login that has <code>VIEW DATABASE STATE</code>.</p>
             // Bucket 0..4 -> alpha 0.15..0.85 over a fixed hue that reads on both themes.
             var alpha = (0.15 + bucket * 0.175).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
             var style = $"background:rgba(220,80,40,{alpha});border-color:rgba(220,80,40,0.9)";
-            var href = obj is null ? "#" : $"files/{Html.Encode(obj.DefinedInSlug)}.html";
+            var href = obj is null ? "#" : $"object.html?id={Uri.EscapeDataString(obj.Id)}";
             sb.Append($"""<a class="tile" href="{href}" style="{style}" title="{Html.Encode(label)}: {s.ExecutionCount:N0} executions">{Html.Encode(label)}<br><small>{s.ExecutionCount:N0}</small></a>""");
         }
         sb.Append("</div>");
@@ -98,7 +106,7 @@ page, reconnect with a login that has <code>VIEW DATABASE STATE</code>.</p>
         if (rt.MissingIndexes.Count > 0)
         {
             sb.Append("<h3>Missing indexes</h3>");
-            sb.Append("""<table class="grid"><tr><th>Table</th><th>Equality cols</th><th>Inequality cols</th><th>Included</th><th>Impact</th><th></th></tr>""");
+            sb.Append("""<table class="grid sortable" data-page-size="20"><thead><tr><th>Table</th><th>Equality cols</th><th>Inequality cols</th><th>Included</th><th>Impact</th><th></th></tr></thead><tbody>""");
             foreach (var m in rt.MissingIndexes)
             {
                 var label = Label(ctx, m.ObjectId);
@@ -108,18 +116,18 @@ page, reconnect with a login that has <code>VIEW DATABASE STATE</code>.</p>
 <td>{Html.Encode(m.IncludedColumns)}</td><td>{m.ImpactScore:N0}</td><td>{badge}</td></tr>
 """);
             }
-            sb.Append("</table>");
+            sb.Append("</tbody></table>");
         }
 
         if (unused.Count > 0)
         {
             sb.Append("<h3>Unused indexes</h3>");
-            sb.Append("""<table class="grid"><tr><th>Table</th><th>Index</th><th>Updates (writes)</th><th></th></tr>""");
+            sb.Append("""<table class="grid sortable" data-page-size="20"><thead><tr><th>Table</th><th>Index</th><th>Updates (writes)</th><th></th></tr></thead><tbody>""");
             foreach (var i in unused)
             {
                 sb.Append($"""<tr><td>{Html.Encode(Label(ctx, i.ObjectId))}</td><td>{Html.Encode(i.IndexName)}</td><td>{i.UserUpdates:N0}</td><td><span class="badge warn">unused</span></td></tr>""");
             }
-            sb.Append("</table>");
+            sb.Append("</tbody></table>");
         }
 
         if (rt.MissingIndexes.Count == 0 && unused.Count == 0)

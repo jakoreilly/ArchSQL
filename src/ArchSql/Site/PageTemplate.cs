@@ -15,7 +15,7 @@ public static class PageTemplate
 {
     public static readonly (string Section, (string Href, string Title, string Icon)[] Items)[] NavSections =
     [
-        ("Start", [("index.html", "Overview", "◈"), ("guide.html", "Guide", "❓")]),
+        ("Start", [("index.html", "Overview", "◈"), ("guide.html", "Guide", "❓"), ("explore.html", "Explore", "🔎")]),
         ("Schema", [("objects.html", "Objects", "❖"), ("er.html", "ER Diagram", "⬡"), ("dependencies.html", "Dependencies", "⇄"), ("crud.html", "CRUD Matrix", "▦")]),
         ("Health", [("lint.html", "Lint", "◉"), ("scorecard.html", "Scorecard", "✔"), ("metrics.html", "Metrics", "📐"), ("impact.html", "Impact", "☢"), ("activity.html", "Activity", "🔥")]),
         ("Reference", [("config.html", "Config & Secrets", "🔑")]),

@@ -49,10 +49,10 @@ write tables, their operations appear here.</p>
                 var actor = byId.GetValueOrDefault(e.Actor);
                 var opsDisplay = Normalize(e.Ops);
                 var search = $"{target?.Schema}.{target?.Name} {actor?.Schema}.{actor?.Name}".ToLowerInvariant();
-                var actorFile = actor is null ? "" : $"""<a href="files/{Html.Encode(actor.DefinedInSlug)}.html">{Html.Encode(actor.DefinedInSlug)}</a>""";
+                var actorFile = actor is null ? "" : $"""<a href="object.html?id={Uri.EscapeDataString(actor.Id)}">{Html.Encode(actor.DefinedInSlug)}</a>""";
                 sb.Append($"""
 <tr class="filterable" data-search="{Html.Encode(search)}">
-<td>{(target is null ? Html.Encode(e.Target) : $"""<a href="files/{Html.Encode(target.DefinedInSlug)}.html">{Html.Encode(target.Schema)}.{Html.Encode(target.Name)}</a>""")}</td>
+<td>{(target is null ? Html.Encode(e.Target) : $"""<a href="object.html?id={Uri.EscapeDataString(target.Id)}">{Html.Encode(target.Schema)}.{Html.Encode(target.Name)}</a>""")}</td>
 <td>{(actor is null ? Html.Encode(e.Actor) : $"{Html.Encode(actor.Schema)}.{Html.Encode(actor.Name)}")}</td>
 <td><span class="badge">{Html.Encode(opsDisplay)}</span></td>
 <td>{actorFile}</td>

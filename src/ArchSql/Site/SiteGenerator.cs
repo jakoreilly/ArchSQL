@@ -18,13 +18,19 @@ public static class SiteGenerator
         Directory.CreateDirectory(outDir);
         CopyAssetTree(outDir);
         var ctx = SiteContext.Build(model);
-        // Write the search index once as a shared asset; every page references it by src (O(pages)
-        // bytes instead of inlining the whole index into each page).
+        // Write the search index and graph/object-detail payloads once as shared assets; every
+        // page references them by src (O(pages) bytes instead of inlining into each page).
         SearchIndex.WriteAsset(model, outDir);
+        GraphData.WriteAsset(ctx, outDir);
+        ObjectDetailData.WriteAsset(ctx, outDir);
         var searchIndexHtml = SearchIndex.ScriptSrc("");
+        // graph-data.js/object-detail.js must load before assets/site.js (whose IIFEs read the
+        // payload synchronously at parse time), so they are appended to the same pre-site.js slot.
+        var graphPayloadScripts = searchIndexHtml + GraphData.ScriptSrc("") + ObjectDetailData.ScriptSrc("");
 
         WritePage(outDir, "index.html", "Overview", model, "index.html", "", PageTemplate.Crumbs((null, "Overview")), IndexPage.Body(ctx), searchIndexHtml);
         WritePage(outDir, "guide.html", "Guide", model, "guide.html", "", PageTemplate.Crumbs((null, "Guide")), GuidePage.Body(ctx), searchIndexHtml);
+        WritePage(outDir, "explore.html", "Explore", model, "explore.html", "", PageTemplate.Crumbs((null, "Explore")), ExplorePage.Body(), graphPayloadScripts);
         WritePage(outDir, "objects.html", "Objects", model, "objects.html", "", PageTemplate.Crumbs((null, "Objects")), ObjectsPage.Body(ctx), searchIndexHtml);
         WritePage(outDir, "er.html", "ER Diagram", model, "er.html", "", PageTemplate.Crumbs((null, "ER Diagram")), ErPage.Body(ctx, maxNodes), searchIndexHtml);
         WritePage(outDir, "dependencies.html", "Dependencies", model, "dependencies.html", "", PageTemplate.Crumbs((null, "Dependencies")), DependenciesPage.Body(ctx, maxNodes), searchIndexHtml);
@@ -35,6 +41,7 @@ public static class SiteGenerator
         WritePage(outDir, "metrics.html", "Metrics", model, "metrics.html", "", PageTemplate.Crumbs((null, "Metrics")), MetricsPage.Body(ctx), searchIndexHtml);
         WritePage(outDir, "activity.html", "Activity", model, "activity.html", "", PageTemplate.Crumbs((null, "Activity")), ActivityPage.Body(ctx), searchIndexHtml);
         WritePage(outDir, "config.html", "Config & Secrets", model, "config.html", "", PageTemplate.Crumbs((null, "Config & Secrets")), ConfigPage.Body(ctx), searchIndexHtml);
+        WritePage(outDir, "object.html", "Object", model, "", "", PageTemplate.Crumbs(("objects.html", "Objects"), (null, "Object")), Pages.ObjectPage.Body(), graphPayloadScripts);
 
         Directory.CreateDirectory(Path.Combine(outDir, "files"));
         var fileSearchIndexHtml = SearchIndex.ScriptSrc("../");

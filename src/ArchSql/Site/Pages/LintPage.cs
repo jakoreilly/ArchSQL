@@ -39,7 +39,7 @@ public static class LintPage
         {
             var (label, cls) = SeverityBand[f.Severity];
             var obj = ctx.ById.GetValueOrDefault(f.ObjectId);
-            var link = obj is not null ? $"""<a href="files/{obj.DefinedInSlug}.html">{Html.Encode(obj.Schema)}.{Html.Encode(obj.Name)}</a>"""
+            var link = obj is not null ? $"""<a href="object.html?id={Uri.EscapeDataString(obj.Id)}">{Html.Encode(obj.Schema)}.{Html.Encode(obj.Name)}</a>"""
                 : ctx.BySlug.TryGetValue(f.Slug, out var file) ? $"""<a href="files/{f.Slug}.html">{Html.Encode(file.RelPath)}</a>""" : "";
             sb.Append($"""
 <tr><td><span class="{cls}">{label}</span></td><td>{Html.Encode(f.RuleId)} — {Html.Encode(f.Title)}</td><td>{link}</td><td>{Html.Encode(f.Message)}</td></tr>

@@ -60,6 +60,13 @@ public static class Pipeline
             }
         }
 
+        // Exclusion runs BEFORE dedup: a "_bak" copy excluded here never reaches the duplicate-id
+        // check, so it produces neither a false collision warning nor a dropped real object.
+        if (options.ExcludePatterns.Count > 0)
+        {
+            ApplyExclusions(options.ExcludePatterns, objects, foreignKeys, dependencies, diagnostics);
+        }
+
         // Object ids must be unique — the resolver and every id-keyed lookup depend on it. A
         // brownfield database can still yield collisions (e.g. two modules whose authored definition
         // text names the same schema.object), so keep the first occurrence and record the rest as
@@ -98,7 +105,43 @@ public static class Pipeline
         {
             model = model with { Runtime = live.ReadRuntime() };
         }
+
+        if (options.ExcludePatterns.Count > 0 && model.Runtime.Available)
+        {
+            model = model with { Runtime = FilterRuntimeByExcludedIds(model) };
+        }
         return model;
+    }
+
+    /// <summary>Drops objects matching any exclude pattern (by name or full id) and every FK/
+    /// dependency touching them. Mutates the lists in place — called once, before dedup.</summary>
+    private static void ApplyExclusions(List<string> patterns, List<DbObject> objects, List<ForeignKey> foreignKeys, List<ObjectDep> dependencies, List<string> diagnostics)
+    {
+        var excludedIds = objects
+            .Where(o => patterns.Any(p => Analysis.Glob.IsMatch(o.Name, p) || Analysis.Glob.IsMatch(o.Id, p)))
+            .Select(o => o.Id)
+            .ToHashSet(StringComparer.Ordinal);
+        if (excludedIds.Count == 0) { return; }
+
+        objects.RemoveAll(o => excludedIds.Contains(o.Id));
+        foreignKeys.RemoveAll(fk => excludedIds.Contains(fk.FromObjectId) || excludedIds.Contains(fk.ToObjectId));
+        dependencies.RemoveAll(d => excludedIds.Contains(d.FromObjectId) || excludedIds.Contains(d.ToObjectId));
+        diagnostics.Add($"Excluded {excludedIds.Count} object(s) matching {patterns.Count} pattern(s): {string.Join(", ", patterns)}.");
+    }
+
+    /// <summary>Runtime facts are fetched after object exclusion decided which ids survive, so this
+    /// only needs to drop stats whose object was excluded (belt-and-braces: a live source's DMV rows
+    /// join by id, and an excluded id simply won't appear in model.Objects any more).</summary>
+    private static RuntimeStats FilterRuntimeByExcludedIds(SqlModel model)
+    {
+        var survivingIds = model.Objects.Select(o => o.Id).ToHashSet(StringComparer.Ordinal);
+        var rt = model.Runtime;
+        return rt with
+        {
+            ObjectStats = rt.ObjectStats.Where(s => survivingIds.Contains(s.ObjectId)).ToList(),
+            IndexStats = rt.IndexStats.Where(s => survivingIds.Contains(s.ObjectId)).ToList(),
+            MissingIndexes = rt.MissingIndexes.Where(m => survivingIds.Contains(m.ObjectId)).ToList(),
+        };
     }
 
     /// <summary>Fills Purpose text (objects+files) and per-object Cyclomatic complexity — both

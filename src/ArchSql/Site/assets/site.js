@@ -939,8 +939,22 @@
     var NUM = { loc: "loc", cog: "cog", fanin: "fanIn", fanout: "fanOut" };
 
     // Returns { nodes: [...], note: "" } or { error: "..." }.
+    // SQL-flavoured aliases for the underlying verbs, so users can ask in SQL terms without the
+    // engine itself changing: "referencedby: Orders" behaves exactly like "importedby: Orders".
+    var VERB_ALIASES = [
+      [/^references:/i, "imports:"],
+      [/^referencedby:/i, "importedby:"],
+      [/^reads:/i, "imports:"],
+      [/^(readby|writtenby|writes):/i, "importedby:"],
+      [/^affects:/i, "reaches:"],
+      [/^affectedby:/i, "reachedby:"],
+      [/^schema:/i, "folder:"],
+      [/^kind:/i, "lang:"],
+    ];
+
     function run(raw) {
       var q = (raw || "").trim();
+      VERB_ALIASES.forEach(function (pair) { q = q.replace(pair[0], pair[1]); });
       if (!q) { return { nodes: [] }; }
       var lower = q.toLowerCase();
 
@@ -1089,4 +1103,314 @@
   if (overlay) { overlay.addEventListener("click", close); }
   document.querySelectorAll(".sidebar nav a").forEach(function (a) { a.addEventListener("click", close); });
   document.addEventListener("keydown", function (e) { if (e.key === "Escape") { close(); } });
+})();
+
+// ---- Neighborhood diagram: a Mermaid subgraph centered on one object, N hops in/out, built
+// entirely from window.ARCH_QUERY. Exposes window.ArchNeighborhood.render so both object.html and
+// any future launcher (ER/Dependencies/Explore) can drive it. Self-guards: does nothing if the
+// payload or the diagram card isn't on the page. ----
+(function () {
+  var data = window.ARCH_QUERY;
+  if (!data || !data.nodes) { return; }
+
+  var byId = {};
+  data.nodes.forEach(function (n) { byId[n.id] = n; });
+  var out = {}, inc = {};
+  (data.edges || []).forEach(function (e) {
+    (out[e.source] = out[e.source] || []).push(e);
+    (inc[e.target] = inc[e.target] || []).push(e);
+  });
+
+  var MAX_NODES = 40;
+
+  function neighborsWithin(centerId, hops, direction) {
+    var seen = {}; seen[centerId] = 0;
+    var queue = [centerId];
+    var edgesUsed = [];
+    while (queue.length) {
+      var cur = queue.shift();
+      var depth = seen[cur];
+      if (depth >= hops) { continue; }
+      var forward = direction !== "in" ? (out[cur] || []) : [];
+      var backward = direction !== "out" ? (inc[cur] || []) : [];
+      forward.concat(backward).forEach(function (e) {
+        var nb = e.source === cur ? e.target : e.source;
+        edgesUsed.push(e);
+        if (!(nb in seen)) { seen[nb] = depth + 1; queue.push(nb); }
+      });
+    }
+    var ids = Object.keys(seen);
+    if (ids.length > MAX_NODES) {
+      // Most-connected-first, center always kept.
+      ids.sort(function (a, b) {
+        var wa = (out[a] || []).length + (inc[a] || []).length;
+        var wb = (out[b] || []).length + (inc[b] || []).length;
+        return wb - wa;
+      });
+      ids = [centerId].concat(ids.filter(function (id) { return id !== centerId; }).slice(0, MAX_NODES - 1));
+    }
+    var idSet = {}; ids.forEach(function (id) { idSet[id] = 1; });
+    var edges = edgesUsed.filter(function (e) { return idSet[e.source] && idSet[e.target]; });
+    // De-dup edges (source,target,kind).
+    var edgeSeen = {}, dedupEdges = [];
+    edges.forEach(function (e) {
+      var k = e.source + ">" + e.target + ">" + e.kind;
+      if (!edgeSeen[k]) { edgeSeen[k] = 1; dedupEdges.push(e); }
+    });
+    return { ids: ids, edges: dedupEdges, capped: ids.length < Object.keys(seen).length };
+  }
+
+  function shapeFor(token, node) {
+    var label = (node.path || node.label || node.id).replace(/"/g, "'");
+    if (node.lang === "table") { return token + "[\"" + label + "\"]"; }
+    if (node.lang === "view") { return token + "(\"" + label + "\")"; }
+    return token + "{{\"" + label + "\"}}";
+  }
+
+  function buildMermaid(centerId, ids, edges) {
+    var token = {};
+    ids.forEach(function (id, i) { token[id] = "n" + (100 + i); });
+    var lines = ["flowchart LR"];
+    ids.forEach(function (id) {
+      var node = byId[id];
+      if (node) { lines.push("  " + shapeFor(token[id], node) + (id === centerId ? ":::center" : "")); }
+    });
+    var cascadeIdx = [];
+    edges.forEach(function (e, i) {
+      lines.push("  " + token[e.source] + " --> " + token[e.target]);
+      if (e.kind === "fk-cascade") { cascadeIdx.push(i); }
+    });
+    lines.push("  classDef center stroke-width:3px;");
+    cascadeIdx.forEach(function (i) { lines.push("  linkStyle " + i + " stroke:#e5484d,stroke-width:2px;"); });
+    return { source: lines.join("\n"), token: token };
+  }
+
+  function render(opts) {
+    var card = document.getElementById(opts.cardId);
+    if (!card || !window.ArchViewer) { return; }
+    var centerId = opts.centerId, hops = opts.hops || 1, direction = opts.direction || "both";
+    var center = byId[centerId];
+    if (!center) { return; }
+
+    var nb = neighborsWithin(centerId, hops, direction);
+    var built = buildMermaid(centerId, nb.ids, nb.edges);
+    var src = card.querySelector(".mermaid-src");
+    if (src) { src.textContent = built.source; }
+    // Stored on the card (not captured in the click closure below) so a later render() call from a
+    // recenter updates what clicks resolve against — the closure is bound once, but reads this
+    // field fresh on every click.
+    card._archTokenMap = built.token;
+    window.ArchViewer.rerenderCard(card);
+
+    // Recenter on node click via event delegation (survives re-renders; bound once per card).
+    var target = card.querySelector(".render-target");
+    if (target && !target.dataset.neighborhoodBound) {
+      target.dataset.neighborhoodBound = "1";
+      target.addEventListener("click", function (e) {
+        var el = e.target.closest && e.target.closest("[id^='flowchart-']");
+        if (!el) { return; }
+        var m = /^flowchart-(n\d+)-/.exec(el.id);
+        if (!m) { return; }
+        var clickedToken = m[1];
+        var tokenMap = card._archTokenMap || {};
+        var clickedId = null;
+        Object.keys(tokenMap).forEach(function (id) { if (tokenMap[id] === clickedToken) { clickedId = id; } });
+        if (clickedId && opts.onRecenter) { opts.onRecenter(clickedId); }
+      });
+    }
+
+    if (opts.onRendered) { opts.onRendered(nb, center); }
+  }
+
+  window.ArchNeighborhood = { render: render, neighborsOf: function (id, hops, direction) { return neighborsWithin(id, hops, direction); }, nodeById: function (id) { return byId[id]; } };
+})();
+
+// ---- Object page: renders object.html entirely from ?id=, using window.ARCH_QUERY (graph/metrics)
+// and window.ARCH_OBJDETAIL (columns/PK/findings/purpose). Self-guards on #object-page. ----
+(function () {
+  var root = document.getElementById("object-page");
+  var data = window.ARCH_QUERY;
+  if (!root || !data || !data.nodes) { return; }
+
+  var byId = {};
+  data.nodes.forEach(function (n) { byId[n.id] = n; });
+  var detail = window.ARCH_OBJDETAIL || {};
+
+  var notFound = document.getElementById("obj-notfound");
+  var content = document.getElementById("obj-content");
+  var els = {
+    title: document.getElementById("obj-title"),
+    purpose: document.getElementById("obj-purpose"),
+    tiles: document.getElementById("obj-tiles"),
+    columns: document.getElementById("obj-columns-wrap"),
+    findings: document.getElementById("obj-findings-wrap"),
+    depsIn: document.getElementById("obj-deps-in"),
+    depsOut: document.getElementById("obj-deps-out"),
+    impactLink: document.getElementById("obj-impact-link"),
+    hops: document.getElementById("obj-hops"),
+    hopsVal: document.getElementById("obj-hops-val"),
+    direction: document.getElementById("obj-direction"),
+  };
+
+  function esc(s) { return (s == null ? "" : String(s)).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+  function currentId() {
+    var m = /[?&]id=([^&]+)/.exec(window.location.search);
+    return m ? decodeURIComponent(m[1]) : "";
+  }
+
+  function tile(num, label) { return '<div class="tile' + (num === 0 || num === "0" ? " tile-zero" : "") + '"><div class="num">' + esc(num) + '</div><div class="lbl">' + esc(label) + '</div></div>'; }
+
+  function renderDepsList(el, edges, otherSide) {
+    if (!edges.length) { el.innerHTML = '<li class="palette-empty">None found.</li>'; return; }
+    el.innerHTML = "";
+    edges.forEach(function (e) {
+      var otherId = e[otherSide];
+      var node = byId[otherId];
+      var li = document.createElement("li");
+      var a = document.createElement("a");
+      a.href = node ? node.href : "#";
+      a.textContent = node ? node.path : otherId;
+      li.appendChild(a);
+      var meta = document.createElement("span");
+      meta.className = "palette-detail";
+      meta.textContent = e.kind;
+      li.appendChild(meta);
+      el.appendChild(li);
+    });
+  }
+
+  function show(id) {
+    var node = byId[id];
+    if (!node) { notFound.hidden = false; content.hidden = true; return; }
+    notFound.hidden = true; content.hidden = false;
+    var d = detail[id] || {};
+
+    els.title.textContent = node.path;
+    els.purpose.textContent = d.purpose || "";
+    els.tiles.innerHTML = tile(node.lang, "Kind") + tile(node.fanIn, "Fan-in") + tile(node.fanOut, "Fan-out")
+      + (node.execs >= 0 ? tile(node.execs.toLocaleString(), "Executions") : "");
+
+    if (d.columns && d.columns.length) {
+      var rows = d.columns.map(function (c) {
+        return "<tr><td>" + esc(c.name) + "</td><td>" + esc(c.type) + "</td><td>" + (c.nullable ? "Yes" : "No") + "</td><td>" + (c.pk ? "✓" : "") + "</td></tr>";
+      }).join("");
+      els.columns.innerHTML = '<table class="grid"><tr><th>Column</th><th>Type</th><th>Nullable</th><th>PK</th></tr>' + rows + "</table>";
+    } else { els.columns.innerHTML = ""; }
+
+    if (d.findings && d.findings.length) {
+      els.findings.innerHTML = "<p><strong>Lint findings:</strong></p><ul>" + d.findings.map(function (f) {
+        return '<li><span class="badge warn">' + esc(f.ruleId) + "</span> " + esc(f.message) + "</li>";
+      }).join("") + "</ul>";
+    } else { els.findings.innerHTML = ""; }
+
+    if (d.fileHref) {
+      var link = document.getElementById("obj-source-link");
+      if (link) { link.href = d.fileHref; link.hidden = false; }
+    }
+    if (els.impactLink) { els.impactLink.href = "impact.html?id=" + encodeURIComponent(id); }
+
+    var inEdges = (data.edges || []).filter(function (e) { return e.target === id; });
+    var outEdges = (data.edges || []).filter(function (e) { return e.source === id; });
+    renderDepsList(els.depsIn, inEdges, "source");
+    renderDepsList(els.depsOut, outEdges, "target");
+
+    renderDiagram(id);
+  }
+
+  function renderDiagram(id) {
+    var hops = els.hops ? parseInt(els.hops.value, 10) || 1 : 1;
+    var direction = els.direction ? els.direction.value : "both";
+    if (els.hopsVal) { els.hopsVal.textContent = hops; }
+    window.ArchNeighborhood.render({
+      cardId: "neighborhood-card",
+      centerId: id,
+      hops: hops,
+      direction: direction,
+      onRecenter: function (newId) {
+        history.replaceState(null, "", "object.html?id=" + encodeURIComponent(newId));
+        show(newId);
+      },
+    });
+  }
+
+  if (els.hops) { els.hops.addEventListener("input", function () { renderDiagram(currentId()); }); }
+  if (els.direction) { els.direction.addEventListener("change", function () { renderDiagram(currentId()); }); }
+
+  show(currentId());
+})();
+
+// ---- Sortable, paginated tables: <table class="grid sortable" data-page-size="20">. Click a
+// header to sort by that column (toggles ascending/descending); rows beyond the page size are
+// hidden behind a "Show all" toggle. Self-contained per table; does nothing to tables without the
+// "sortable" class. ----
+(function () {
+  var tables = document.querySelectorAll("table.sortable");
+  tables.forEach(function (table) {
+    var thead = table.querySelector("thead");
+    var tbody = table.querySelector("tbody");
+    if (!thead || !tbody) { return; }
+    var headers = thead.querySelectorAll("th");
+    var pageSize = parseInt(table.getAttribute("data-page-size"), 10) || 0;
+    var showingAll = false;
+
+    function rows() { return Array.prototype.slice.call(tbody.querySelectorAll("tr")); }
+
+    function cellValue(tr, idx) {
+      var td = tr.children[idx];
+      if (!td) { return ""; }
+      var raw = td.getAttribute("data-sort-value");
+      return raw != null ? raw : td.textContent.trim();
+    }
+
+    function applyPagination() {
+      var all = rows();
+      all.forEach(function (tr, i) {
+        tr.style.display = (showingAll || pageSize <= 0 || i < pageSize) ? "" : "none";
+      });
+      var more = table.parentNode.querySelector(".table-more[data-for='" + table.id + "']");
+      if (pageSize > 0 && all.length > pageSize) {
+        if (!more) {
+          more = document.createElement("button");
+          more.type = "button";
+          more.className = "btn table-more";
+          more.setAttribute("data-for", table.id);
+          table.parentNode.insertBefore(more, table.nextSibling);
+          more.addEventListener("click", function () {
+            showingAll = !showingAll;
+            applyPagination();
+          });
+        }
+        var hiddenCount = all.length - pageSize;
+        more.textContent = showingAll ? "Show top " + pageSize : "Show all (" + hiddenCount + " more)";
+        more.hidden = false;
+      } else if (more) { more.hidden = true; }
+    }
+
+    if (pageSize > 0 && !table.id) { table.id = "sortable-" + Math.random().toString(36).slice(2, 9); }
+
+    headers.forEach(function (th, idx) {
+      th.classList.add("sortable-th");
+      th.setAttribute("tabindex", "0");
+      var dir = 1;
+      function sort() {
+        var all = rows();
+        all.sort(function (a, b) {
+          var va = cellValue(a, idx), vb = cellValue(b, idx);
+          var na = parseFloat(va.replace(/,/g, "")), nb = parseFloat(vb.replace(/,/g, ""));
+          var cmp = (!isNaN(na) && !isNaN(nb)) ? na - nb : va.localeCompare(vb);
+          return cmp * dir;
+        });
+        headers.forEach(function (h) { h.classList.remove("sort-asc", "sort-desc"); });
+        th.classList.add(dir === 1 ? "sort-asc" : "sort-desc");
+        all.forEach(function (tr) { tbody.appendChild(tr); });
+        dir = -dir;
+        applyPagination();
+      }
+      th.addEventListener("click", sort);
+      th.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); sort(); } });
+    });
+
+    applyPagination();
+  });
 })();

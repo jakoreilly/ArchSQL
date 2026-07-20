@@ -28,7 +28,7 @@ public static class ObjectsPage
             sb.Append($"""
 <tr data-test="{(file?.RelPath.Contains("test", StringComparison.OrdinalIgnoreCase) == true ? "1" : "0")}">
 <td>{Html.Encode(o.Schema)}</td>
-<td><a href="files/{o.DefinedInSlug}.html">{Html.Encode(o.Name)}</a>{shallow}</td>
+<td><a href="object.html?id={Uri.EscapeDataString(o.Id)}">{Html.Encode(o.Name)}</a>{shallow}</td>
 <td>{Html.Encode(o.Kind)}</td>
 <td>{pkBadge}</td>
 <td>{o.Columns.Count}</td>

@@ -23,7 +23,7 @@ public static class MetricsPage
             sb.Append("""<table class="grid"><tr><th>Object</th><th>Cyclomatic</th></tr>""");
             foreach (var o in procs)
             {
-                sb.Append($"""<tr><td><a href="files/{o.DefinedInSlug}.html">{Html.Encode(o.Schema)}.{Html.Encode(o.Name)}</a></td><td>{o.Cyclomatic}</td></tr>""");
+                sb.Append($"""<tr><td><a href="object.html?id={Uri.EscapeDataString(o.Id)}">{Html.Encode(o.Schema)}.{Html.Encode(o.Name)}</a></td><td>{o.Cyclomatic}</td></tr>""");
             }
             sb.Append("</table>");
         }
@@ -38,7 +38,7 @@ public static class MetricsPage
         foreach (var (id, count) in counts.OrderByDescending(kv => kv.Value).Take(15))
         {
             if (!ctx.ById.TryGetValue(id, out var o)) { continue; }
-            sb.Append($"""<tr><td><a href="files/{o.DefinedInSlug}.html">{Html.Encode(o.Schema)}.{Html.Encode(o.Name)}</a></td><td>{count}</td></tr>""");
+            sb.Append($"""<tr><td><a href="object.html?id={Uri.EscapeDataString(o.Id)}">{Html.Encode(o.Schema)}.{Html.Encode(o.Name)}</a></td><td>{count}</td></tr>""");
         }
         sb.Append("</table></div>");
     }

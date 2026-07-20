@@ -16,6 +16,15 @@ and their foreign-key and dependency links are below, alongside a lint report an
 scorecard. Everything works from file:// with no network.</p>
 """);
 
+        sb.Append("""
+<div class="panel">
+<p><strong>New to this database?</strong> Start with <a href="explore.html">Explore</a> to search
+objects and ask the graph questions ("what does this table affect?"), or open any object to see its
+<strong>neighborhood</strong> — what it touches and what touches it. <a href="crud.html">CRUD</a>
+shows what writes each table; <a href="impact.html">Impact</a> shows what breaks if you change one.</p>
+</div>
+""");
+
         var tables = model.Objects.Count(o => o.Kind == "table");
         var views = model.Objects.Count(o => o.Kind == "view");
         var procs = model.Objects.Count(o => o.Kind is "procedure" or "function" or "trigger");

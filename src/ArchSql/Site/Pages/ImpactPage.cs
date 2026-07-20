@@ -50,29 +50,38 @@ this as a floor, not a ceiling.</p>
             {
                 $"{Html.Encode(o.Schema)}.{Html.Encode(o.Name)}",
                 Html.Encode(o.Kind),
-                o.DefinedInSlug.Length > 0 ? $"files/{o.DefinedInSlug}.html" : "",
+                $"object.html?id={Uri.EscapeDataString(o.Id)}",
                 execs is not null && execs.TryGetValue(o.Id, out var e) ? e : -1L,
             },
             StringComparer.Ordinal);
 
         sb.Append($"""<script>window.ARCH_REV={JsonSerializer.Serialize(revJson)};window.ARCH_META={JsonSerializer.Serialize(meta)};window.ARCH_IMPACT_RUNTIME={(execs is not null ? "true" : "false")};window.ARCH_MAXDEPTH={ImpactGraph.MaxDepth};</script>""");
 
-        sb.Append("""<select id="impact-object" class="filter-input"><option value="">Choose an object…</option>""");
-        foreach (var o in model.Objects.OrderBy(o => o.Schema, StringComparer.OrdinalIgnoreCase).ThenBy(o => o.Name, StringComparer.OrdinalIgnoreCase))
-        {
-            sb.Append($"""<option value="{Html.Encode(o.Id)}">{Html.Encode(o.Schema)}.{Html.Encode(o.Name)} ({Html.Encode(o.Kind)})</option>""");
-        }
-        sb.Append("</select>");
-        sb.Append("""<div id="impact-results"></div>""");
+        // Type-ahead search instead of a full <select> — a database with thousands of objects made
+        // the dropdown itself slow to open and scroll. Accepts ?id= to preselect (e.g. a "Trace full
+        // impact" link from object.html).
+        sb.Append("""
+<div class="select-row">
+  <input class="filter-input" id="impact-search" type="search" autocomplete="off" spellcheck="false" placeholder="Search for an object…">
+  <span class="filter-count" id="impact-search-count"></span>
+</div>
+<ul class="palette-results" id="impact-search-results" style="position:static;max-height:220px;overflow:auto"></ul>
+<div id="impact-selected"></div>
+<div id="impact-results"></div>
+""");
 
         sb.Append("""
 <script>
 (function () {
-  var sel = document.getElementById("impact-object");
+  var input = document.getElementById("impact-search");
+  var resultsList = document.getElementById("impact-search-results");
+  var countEl = document.getElementById("impact-search-count");
+  var selectedEl = document.getElementById("impact-selected");
   var out = document.getElementById("impact-results");
-  if (!sel || !out) { return; }
+  if (!input || !out) { return; }
   var rev = window.ARCH_REV || {}, meta = window.ARCH_META || {};
   var rt = window.ARCH_IMPACT_RUNTIME, maxDepth = window.ARCH_MAXDEPTH || 32;
+  var ids = Object.keys(meta);
 
   function dependents(rootId) {
     var visited = {}; visited[rootId] = true;
@@ -92,9 +101,37 @@ this as a floor, not a ceiling.</p>
     return { hits: hits, capped: capped };
   }
 
-  function render() {
-    var id = sel.value;
-    if (!id) { out.innerHTML = ""; return; }
+  function select(id) {
+    var m = meta[id];
+    if (!m) { return; }
+    history.replaceState(null, "", "impact.html?id=" + encodeURIComponent(id));
+    input.value = m[0];
+    resultsList.innerHTML = ""; countEl.textContent = "";
+    selectedEl.innerHTML = '<p class="lede">Tracing impact of <strong>' + m[0] + '</strong> ('
+      + m[1] + ') · <a href="object.html?id=' + encodeURIComponent(id) + '">View neighborhood →</a></p>';
+    render(id);
+  }
+
+  function searchResults() {
+    var q = input.value.trim().toLowerCase();
+    resultsList.innerHTML = "";
+    if (!q) { countEl.textContent = ""; return; }
+    var hits = ids.filter(function (id) { return meta[id][0].toLowerCase().indexOf(q) >= 0; }).slice(0, 20);
+    countEl.textContent = hits.length + " match" + (hits.length === 1 ? "" : "es");
+    hits.forEach(function (id) {
+      var li = document.createElement("li");
+      var a = document.createElement("a");
+      a.href = "#"; a.textContent = meta[id][0];
+      a.addEventListener("click", function (e) { e.preventDefault(); select(id); });
+      li.appendChild(a);
+      var kind = document.createElement("span");
+      kind.className = "palette-detail"; kind.textContent = meta[id][1];
+      li.appendChild(kind);
+      resultsList.appendChild(li);
+    });
+  }
+
+  function render(id) {
     var res = dependents(id);
     if (res.hits.length === 0) {
       out.innerHTML = '<div class="panel empty-state"><div class="big">◇</div><p>Nothing in this scan depends on this object. It may still be used by application code or dynamic SQL outside these scripts.</p></div>';
@@ -114,7 +151,12 @@ this as a floor, not a ceiling.</p>
     if (res.capped) { html += '<p class="note">Traversal stopped at depth ' + maxDepth + ' (a dependency cycle or an unusually deep chain). Results above are complete to that depth.</p>'; }
     out.innerHTML = html;
   }
-  sel.addEventListener("change", render);
+
+  input.addEventListener("input", searchResults);
+  input.addEventListener("focus", searchResults);
+
+  var m = /[?&]id=([^&]+)/.exec(window.location.search);
+  if (m && meta[decodeURIComponent(m[1])]) { select(decodeURIComponent(m[1])); }
 })();
 </script>
 """);

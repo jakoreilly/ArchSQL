@@ -19,14 +19,18 @@ public sealed record CliOptions
     public string? ConnectionString { get; init; }
     /// <summary>Connection/command timeout in seconds for the live source.</summary>
     public int TimeoutSeconds { get; init; } = 30;
+    /// <summary>Glob patterns (object name or schema.name id) excluded from the model before dedup.
+    /// Combines archsql.config.json's excludePatterns with any --exclude-pattern flags.</summary>
+    public List<string> ExcludePatterns { get; init; } = [];
 
     public static CliOptions? Parse(string[] args, out int exitCode)
     {
         exitCode = 0;
         if (args.Length == 0 || args[0] is "-h" or "--help")
         {
-            Console.Error.WriteLine("Usage: archsql <path-to-folder> [--out <dir>] [--no-open] [--max-nodes <n>] [--exclude <dirname>]... [--dialect <tsql|mysql|postgres|auto>] [--fail-on <gate>[,<gate>...]] [--sarif <path>]");
+            Console.Error.WriteLine("Usage: archsql <path-to-folder> [--out <dir>] [--no-open] [--max-nodes <n>] [--exclude <dirname>]... [--exclude-pattern <glob>]... [--config <path>] [--dialect <tsql|mysql|postgres|auto>] [--fail-on <gate>[,<gate>...]] [--sarif <path>]");
             Console.Error.WriteLine($"  --fail-on gates: {string.Join(", ", Analysis.SqlCiGate.KnownGates.Keys.OrderBy(k => k, StringComparer.Ordinal))}. On a tripped gate the site is still written and the process exits 3 (2 = usage error, 1 = crash).");
+            Console.Error.WriteLine("  --exclude-pattern: a glob (e.g. '*_bak', '*_BAK', 'tmp_*') matched against object name/id, dropped from the model before analysis. Repeatable; also read from archsql.config.json's excludePatterns.");
             exitCode = args.Length == 0 ? 2 : 0;
             return null;
         }
@@ -46,6 +50,8 @@ public sealed record CliOptions
         var dialect = "auto";
         var failOn = new List<string>();
         string? sarifPath = null;
+        var excludePatterns = new List<string>();
+        string? configPath = null;
 
         // Flags grouped by shape (no-value boolean vs. single-value), one branch per SHAPE
         // rather than one per flag (keeps cognitive complexity low — copies CliOptions.Parse
@@ -59,6 +65,8 @@ public sealed record CliOptions
         {
             ["--out"] = v => outDir = v,
             ["--exclude"] = v => exclude.Add(v),
+            ["--exclude-pattern"] = v => excludePatterns.Add(v),
+            ["--config"] = v => configPath = v,
             ["--dialect"] = v => dialect = v,
             ["--sarif"] = v => sarifPath = v,
         };
@@ -89,6 +97,15 @@ public sealed record CliOptions
 
         outDir ??= "site-" + Slugify(Path.GetFileName(source.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)));
 
+        var config = ConfigLoader.Load(configPath, source, out var configError);
+        if (configError is not null)
+        {
+            Console.Error.WriteLine($"error: {configError}");
+            exitCode = 2;
+            return null;
+        }
+        var allExcludePatterns = config.ExcludePatterns.Concat(excludePatterns).ToList();
+
         return new CliOptions
         {
             SourcePath = source,
@@ -96,6 +113,7 @@ public sealed record CliOptions
             Open = open,
             MaxNodes = maxNodes,
             Exclude = exclude,
+            ExcludePatterns = allExcludePatterns,
             ForceDialect = dialect,
             FailOn = failOn,
             SarifPath = sarifPath,

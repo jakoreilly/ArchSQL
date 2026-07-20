@@ -18,6 +18,8 @@ public static class ConnectOptions
         var maxNodes = 60;
         var timeout = 30;
         var failOn = new List<string>();
+        var excludePatterns = new List<string>();
+        string? configPath = null;
 
         for (var i = 1; i < args.Length; i++)
         {
@@ -30,6 +32,8 @@ public static class ConnectOptions
                 case "--max-nodes" when i + 1 < args.Length && int.TryParse(args[i + 1], out var n): maxNodes = Math.Max(10, n); i++; break;
                 case "--timeout" when i + 1 < args.Length && int.TryParse(args[i + 1], out var t): timeout = Math.Clamp(t, 1, 600); i++; break;
                 case "--fail-on" when i + 1 < args.Length: failOn.AddRange(args[++i].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)); break;
+                case "--exclude-pattern" when i + 1 < args.Length: excludePatterns.Add(args[++i]); break;
+                case "--config" when i + 1 < args.Length: configPath = args[++i]; break;
                 default:
                     Console.Error.WriteLine($"error: unknown argument '{args[i]}'.");
                     exitCode = 2;
@@ -53,6 +57,14 @@ public static class ConnectOptions
             return null;
         }
 
+        var config = ConfigLoader.Load(configPath, Environment.CurrentDirectory, out var configError);
+        if (configError is not null)
+        {
+            Console.Error.WriteLine($"error: {configError}");
+            exitCode = 2;
+            return null;
+        }
+
         return new CliOptions
         {
             SourcePath = "live-db",
@@ -63,6 +75,7 @@ public static class ConnectOptions
             MaxNodes = maxNodes,
             ForceDialect = "tsql",
             FailOn = failOn,
+            ExcludePatterns = config.ExcludePatterns.Concat(excludePatterns).ToList(),
         };
     }
 

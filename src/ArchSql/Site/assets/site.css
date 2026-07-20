@@ -177,6 +177,14 @@ table.grid th, table.grid td { text-align: left; padding: .45rem .7rem; border-b
 table.grid th { background: var(--bg-sunken); font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; color: var(--text-soft); }
 table.grid tr:last-child td { border-bottom: none; }
 
+/* ---- Sortable/paginated tables (table.sortable) ---- */
+.sortable-th { cursor: pointer; user-select: none; position: relative; padding-right: 1.3rem !important; }
+.sortable-th:hover { color: var(--accent); }
+.sortable-th::after { content: "\2195"; position: absolute; right: .5rem; opacity: .35; font-size: .85em; }
+.sortable-th.sort-asc::after { content: "\2191"; opacity: 1; color: var(--accent); }
+.sortable-th.sort-desc::after { content: "\2193"; opacity: 1; color: var(--accent); }
+.table-more { margin: .4rem 0 .8rem; }
+
 /* ---- Print (System Brief and any page) ---- */
 @media print {
   .sidebar, .breadcrumbs, .search-open, .explain, .hover-tip, .explain-pop { display: none !important; }

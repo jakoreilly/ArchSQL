@@ -1,4 +1,6 @@
+using ArchSql;
 using ArchSql.Analysis;
+using ArchSql.Cli;
 using ArchSql.Live;
 using Xunit;
 
@@ -6,6 +8,24 @@ namespace ArchSql.Tests;
 
 public class Phase12_LiveSchemaTests
 {
+    [Fact]
+    public void Pipeline_DuplicateObjectIdIsDeduplicatedNotCrashed()
+    {
+        // A brownfield database can yield two definitions that normalize to the same object id.
+        // The pipeline must keep the first and record a diagnostic rather than throwing.
+        var dir = Path.Combine(Path.GetTempPath(), "archsql_dup_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, "a.sql"), "CREATE TABLE [dbo].[Widget] (Id INT);");
+            File.WriteAllText(Path.Combine(dir, "b.sql"), "CREATE TABLE [dbo].[Widget] (Id INT, Name NVARCHAR(50));");
+            var model = Pipeline.BuildModel(new CliOptions { SourcePath = dir });
+            Assert.Single(model.Objects, o => o.Id == "dbo.widget");
+            Assert.Contains(model.Diagnostics, d => d.Contains("Duplicate object id 'dbo.widget'"));
+        }
+        finally { Directory.Delete(dir, recursive: true); }
+    }
+
     [Theory]
     [InlineData("int", 4, 0, 0, "int")]
     [InlineData("nvarchar", 200, 0, 0, "nvarchar(100)")]   // n-types: max_length is bytes -> /2

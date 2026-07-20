@@ -6,7 +6,7 @@ work/
 *.user
 .vs/
 .DS_Store
-
+conn.txt
 # Ignore Markdown files by default, but keep the existing project docs tracked.
 *.md
 !README.md

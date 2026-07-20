@@ -60,6 +60,12 @@ public static class Pipeline
             }
         }
 
+        // Object ids must be unique — the resolver keys objects by id. A brownfield database can
+        // still yield collisions (e.g. two modules whose authored definition text names the same
+        // schema.object, even though the catalog keeps them distinct), so keep the first occurrence
+        // and record the rest as diagnostics rather than crashing.
+        objects = DeduplicateById(objects, diagnostics);
+
         var rootName = Path.GetFileName(options.SourcePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
         if (string.IsNullOrWhiteSpace(rootName)) { rootName = "project"; }
 
@@ -93,6 +99,20 @@ public static class Pipeline
             model = model with { Runtime = live.ReadRuntime() };
         }
         return model;
+    }
+
+    /// <summary>Keeps the first object per id and drops later collisions, recording each drop as a
+    /// diagnostic. Order-preserving so the result stays deterministic.</summary>
+    private static List<DbObject> DeduplicateById(List<DbObject> objects, List<string> diagnostics)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var result = new List<DbObject>(objects.Count);
+        foreach (var o in objects)
+        {
+            if (seen.Add(o.Id)) { result.Add(o); }
+            else { diagnostics.Add($"Duplicate object id '{o.Id}' (defined in {o.DefinedInSlug}) was skipped; the first definition is kept."); }
+        }
+        return result;
     }
 
     /// <summary>Fills Purpose text (objects+files) and per-object Cyclomatic complexity — both

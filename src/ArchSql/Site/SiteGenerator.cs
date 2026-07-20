@@ -18,22 +18,26 @@ public static class SiteGenerator
         Directory.CreateDirectory(outDir);
         CopyAssetTree(outDir);
         var ctx = SiteContext.Build(model);
+        var searchIndexHtml = SearchIndex.ScriptTag(model);
 
-        WritePage(outDir, "index.html", "Overview", model, "index.html", "", PageTemplate.Crumbs((null, "Overview")), IndexPage.Body(ctx));
-        WritePage(outDir, "guide.html", "Guide", model, "guide.html", "", PageTemplate.Crumbs((null, "Guide")), GuidePage.Body(ctx));
-        WritePage(outDir, "objects.html", "Objects", model, "objects.html", "", PageTemplate.Crumbs((null, "Objects")), ObjectsPage.Body(ctx));
-        WritePage(outDir, "er.html", "ER Diagram", model, "er.html", "", PageTemplate.Crumbs((null, "ER Diagram")), ErPage.Body(ctx, maxNodes));
-        WritePage(outDir, "dependencies.html", "Dependencies", model, "dependencies.html", "", PageTemplate.Crumbs((null, "Dependencies")), DependenciesPage.Body(ctx, maxNodes));
-        WritePage(outDir, "lint.html", "Lint", model, "lint.html", "", PageTemplate.Crumbs((null, "Lint")), LintPage.Body(ctx));
-        WritePage(outDir, "scorecard.html", "Scorecard", model, "scorecard.html", "", PageTemplate.Crumbs((null, "Scorecard")), ScorecardPage.Body(ctx));
-        WritePage(outDir, "metrics.html", "Metrics", model, "metrics.html", "", PageTemplate.Crumbs((null, "Metrics")), MetricsPage.Body(ctx));
-        WritePage(outDir, "config.html", "Config & Secrets", model, "config.html", "", PageTemplate.Crumbs((null, "Config & Secrets")), ConfigPage.Body(ctx));
+        WritePage(outDir, "index.html", "Overview", model, "index.html", "", PageTemplate.Crumbs((null, "Overview")), IndexPage.Body(ctx), searchIndexHtml);
+        WritePage(outDir, "guide.html", "Guide", model, "guide.html", "", PageTemplate.Crumbs((null, "Guide")), GuidePage.Body(ctx), searchIndexHtml);
+        WritePage(outDir, "objects.html", "Objects", model, "objects.html", "", PageTemplate.Crumbs((null, "Objects")), ObjectsPage.Body(ctx), searchIndexHtml);
+        WritePage(outDir, "er.html", "ER Diagram", model, "er.html", "", PageTemplate.Crumbs((null, "ER Diagram")), ErPage.Body(ctx, maxNodes), searchIndexHtml);
+        WritePage(outDir, "dependencies.html", "Dependencies", model, "dependencies.html", "", PageTemplate.Crumbs((null, "Dependencies")), DependenciesPage.Body(ctx, maxNodes), searchIndexHtml);
+        WritePage(outDir, "crud.html", "CRUD Matrix", model, "crud.html", "", PageTemplate.Crumbs((null, "CRUD Matrix")), Pages.CrudPage.Body(ctx), searchIndexHtml);
+        WritePage(outDir, "impact.html", "Impact", model, "impact.html", "", PageTemplate.Crumbs((null, "Impact")), Pages.ImpactPage.Body(ctx), searchIndexHtml);
+        WritePage(outDir, "lint.html", "Lint", model, "lint.html", "", PageTemplate.Crumbs((null, "Lint")), LintPage.Body(ctx), searchIndexHtml);
+        WritePage(outDir, "scorecard.html", "Scorecard", model, "scorecard.html", "", PageTemplate.Crumbs((null, "Scorecard")), ScorecardPage.Body(ctx), searchIndexHtml);
+        WritePage(outDir, "metrics.html", "Metrics", model, "metrics.html", "", PageTemplate.Crumbs((null, "Metrics")), MetricsPage.Body(ctx), searchIndexHtml);
+        WritePage(outDir, "activity.html", "Activity", model, "activity.html", "", PageTemplate.Crumbs((null, "Activity")), ActivityPage.Body(ctx), searchIndexHtml);
+        WritePage(outDir, "config.html", "Config & Secrets", model, "config.html", "", PageTemplate.Crumbs((null, "Config & Secrets")), ConfigPage.Body(ctx), searchIndexHtml);
 
         Directory.CreateDirectory(Path.Combine(outDir, "files"));
         foreach (var file in model.Files)
         {
             var crumbs = PageTemplate.Crumbs(("../objects.html", "Objects"), (null, file.RelPath));
-            var html = PageTemplate.Render(file.RelPath, model.RootName, "", "../", crumbs, ObjectFilePage.Body(ctx, file));
+            var html = PageTemplate.Render(file.RelPath, model.RootName, "", "../", crumbs, ObjectFilePage.Body(ctx, file), searchIndexHtml);
             File.WriteAllText(Path.Combine(outDir, "files", file.Slug + ".html"), html, Utf8NoBom);
         }
 
@@ -42,9 +46,9 @@ public static class SiteGenerator
         return Path.Combine(outDir, "index.html");
     }
 
-    private static void WritePage(string outDir, string fileName, string title, SqlModel model, string activeHref, string relRoot, string crumbs, string body)
+    private static void WritePage(string outDir, string fileName, string title, SqlModel model, string activeHref, string relRoot, string crumbs, string body, string searchIndexHtml)
     {
-        var html = PageTemplate.Render(title, model.RootName, activeHref, relRoot, crumbs, body);
+        var html = PageTemplate.Render(title, model.RootName, activeHref, relRoot, crumbs, body, searchIndexHtml);
         File.WriteAllText(Path.Combine(outDir, fileName), html, Utf8NoBom);
     }
 

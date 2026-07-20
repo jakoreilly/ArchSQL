@@ -27,8 +27,8 @@ public static class Pipeline
     public static SqlModel BuildModel(CliOptions options)
     {
         var diagnostics = new List<string>();
-        var source = new SqlFileSchemaSource(options.SourcePath, options.Exclude, options.ForceDialect, diagnostics);
-        var units = source.Read().ToList(); // materialize once: Read() enumerates the disk scan
+        var source = SchemaSourceFactory.Create(options, diagnostics);
+        var units = source.Read().ToList(); // materialize once: Read() enumerates the disk scan or live catalog
 
         var analyzers = new List<ISqlDialectAnalyzer> { new TSqlScriptDomAnalyzer() };
 
@@ -78,11 +78,20 @@ public static class Pipeline
             Diagnostics = diagnostics,
             DialectLoc = dialectLoc,
             Dialect = overallDialect,
+            SchemaVersion = SchemaVersions.Current,
         };
 
         model = DependencyResolver.Resolve(model);
         model = ApplyPurposeAndComplexity(model);
+        model = model with { Crud = CrudMatrix.Build(model) };
         model = model with { Findings = SqlRules.Run(model) };
+
+        // Runtime facts join to resolved object ids, so enrich after the reduce and outside the
+        // parallel map. Only a live source supplies them; file scans leave Runtime empty.
+        if (source is IRuntimeStatsSource live)
+        {
+            model = model with { Runtime = live.ReadRuntime() };
+        }
         return model;
     }
 

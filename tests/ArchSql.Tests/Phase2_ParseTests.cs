@@ -27,11 +27,11 @@ public class Phase2_ParseTests
     }
 
     [Fact]
-    public void TSql_ProcedureBodyProducesSelectDependency()
+    public void TSql_ProcedureBodyProducesReadDependency()
     {
         var analyzer = new TSqlScriptDomAnalyzer();
         var facts = analyzer.Analyze("tsql_schema.sql", Fixture("tsql_schema.sql"));
-        Assert.Contains(facts.Dependencies, d => d.Kind == "select" && d.ToObjectId == "dbo.orders");
+        Assert.Contains(facts.Dependencies, d => d.Kind == "read" && d.ToObjectId == "dbo.orders");
     }
 
     [Fact]

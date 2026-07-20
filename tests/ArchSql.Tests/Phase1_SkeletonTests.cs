@@ -42,7 +42,11 @@ public class Phase1_SkeletonTests
     [Fact]
     public void ModelJsonWriter_RoundTripsByteIdentically()
     {
-        var model = new Model.SqlModel { RootName = "demo", SourcePath = "C:/demo" };
+        // SchemaVersion must be the current version here: a raw v1/v0 file is upgraded on read
+        // (ModelUpgrader), which is a deliberate, one-way version bump, not a round-trip break. A
+        // real model produced by Pipeline.BuildModel is always stamped with the current version, so
+        // this reflects what actually gets round-tripped in practice.
+        var model = new Model.SqlModel { RootName = "demo", SourcePath = "C:/demo", SchemaVersion = Model.SchemaVersions.Current };
         var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".json");
         try
         {

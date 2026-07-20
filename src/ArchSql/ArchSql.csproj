@@ -7,11 +7,16 @@
     <Nullable>enable</Nullable>
     <AssemblyName>archsql</AssemblyName>
     <RootNamespace>ArchSql</RootNamespace>
-    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- Must be false: Microsoft.Data.SqlClient requires ICU/globalization support and throws at
+         connection time under invariant mode. All culture-sensitive operations in this codebase
+         use explicit InvariantCulture/Ordinal comparisons, so disabling invariant mode does not
+         change any output. -->
+    <InvariantGlobalization>false</InvariantGlobalization>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="161.9142.1" />
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="6.0.1" />
   </ItemGroup>
 
   <ItemGroup>

@@ -16,13 +16,16 @@ public static class PageTemplate
     public static readonly (string Section, (string Href, string Title, string Icon)[] Items)[] NavSections =
     [
         ("Start", [("index.html", "Overview", "◈"), ("guide.html", "Guide", "❓")]),
-        ("Schema", [("objects.html", "Objects", "❖"), ("er.html", "ER Diagram", "⬡"), ("dependencies.html", "Dependencies", "⇄")]),
-        ("Health", [("lint.html", "Lint", "◉"), ("scorecard.html", "Scorecard", "✔"), ("metrics.html", "Metrics", "📐")]),
+        ("Schema", [("objects.html", "Objects", "❖"), ("er.html", "ER Diagram", "⬡"), ("dependencies.html", "Dependencies", "⇄"), ("crud.html", "CRUD Matrix", "▦")]),
+        ("Health", [("lint.html", "Lint", "◉"), ("scorecard.html", "Scorecard", "✔"), ("metrics.html", "Metrics", "📐"), ("impact.html", "Impact", "☢"), ("activity.html", "Activity", "🔥")]),
         ("Reference", [("config.html", "Config & Secrets", "🔑")]),
     ];
 
     /// <param name="relRoot">"" for root pages, "../" for pages under files/.</param>
-    public static string Render(string title, string siteName, string activeHref, string relRoot, string breadcrumbsHtml, string bodyHtml)
+    /// <param name="searchIndexHtml">The Ctrl+K palette's window.ARCH_SEARCH_INDEX script tag
+    /// (SearchIndex.ScriptTag); "" disables search on this page (kept optional so every existing
+    /// caller keeps compiling).</param>
+    public static string Render(string title, string siteName, string activeHref, string relRoot, string breadcrumbsHtml, string bodyHtml, string searchIndexHtml = "")
     {
         var nav = new StringBuilder();
         foreach (var (section, items) in NavSections)
@@ -80,6 +83,7 @@ public static class PageTemplate
     <div class="palette-foot">↑↓ navigate · Enter open · Esc close</div>
   </div>
 </div>
+{{searchIndexHtml}}
 <script src="{{relRoot}}assets/lib/mermaid.min.js"></script>
 <script src="{{relRoot}}assets/site.js"></script>
 </body>

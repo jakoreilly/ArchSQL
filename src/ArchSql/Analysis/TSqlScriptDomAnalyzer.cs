@@ -134,7 +134,16 @@ internal sealed class TSqlFactsVisitor(string relPath) : TSqlFragmentVisitor
         _dependencies.Add(new ObjectDep { FromObjectId = fromObjectId, ToObjectId = toId, Kind = "fk" });
     }
 
-    public override void Visit(CreateViewStatement node)
+    // GOTCHA: these four container statements (view/procedure/function/trigger) each explicitly
+    // walk into their own body to attribute nested dependencies to the right _currentObjectId.
+    // TSqlFragmentVisitor's base ExplicitVisit(T) always does "Visit(node); node.AcceptChildren(this)"
+    // — so overriding Visit(T) here would make the framework ALSO auto-walk the body a SECOND time
+    // afterward, with _currentObjectId already reset to null. That's merely noisy for dependencies,
+    // but for a nested CREATE TABLE #temp it re-adds the same #temp DbObject twice, crashing
+    // DependencyResolver's ToDictionary with a duplicate key. Overriding ExplicitVisit instead of
+    // Visit takes full control of traversal — no implicit second pass — which is the correct
+    // ScriptDom idiom whenever a Visit override needs to control (not just react to) child walking.
+    public override void ExplicitVisit(CreateViewStatement node)
     {
         _statementCount++;
         var (schema, name) = SplitSchemaObjectName(node.SchemaObjectName);
@@ -148,7 +157,7 @@ internal sealed class TSqlFactsVisitor(string relPath) : TSqlFragmentVisitor
         WithCurrentObject(id, () => node.SelectStatement?.Accept(this));
     }
 
-    public override void Visit(CreateProcedureStatement node)
+    public override void ExplicitVisit(CreateProcedureStatement node)
     {
         _statementCount++;
         var (schema, name) = SplitSchemaObjectName(node.ProcedureReference.Name);
@@ -165,7 +174,7 @@ internal sealed class TSqlFactsVisitor(string relPath) : TSqlFragmentVisitor
         });
     }
 
-    public override void Visit(CreateFunctionStatement node)
+    public override void ExplicitVisit(CreateFunctionStatement node)
     {
         _statementCount++;
         var (schema, name) = SplitSchemaObjectName(node.Name);
@@ -178,7 +187,7 @@ internal sealed class TSqlFactsVisitor(string relPath) : TSqlFragmentVisitor
         WithCurrentObject(id, () => node.AcceptChildren(this));
     }
 
-    public override void Visit(CreateTriggerStatement node)
+    public override void ExplicitVisit(CreateTriggerStatement node)
     {
         _statementCount++;
         var name = node.Name?.BaseIdentifier?.Value ?? "";
@@ -228,11 +237,32 @@ internal sealed class TSqlFactsVisitor(string relPath) : TSqlFragmentVisitor
 
     public override void Visit(NamedTableReference node)
     {
-        if (_currentObjectId is null) { return; }
+        if (_currentObjectId is null || ReferenceEquals(node, _dmlTargetToSkip)) { return; }
         var (schema, name) = SplitSchemaObjectName(node.SchemaObject);
-        if (name.Length == 0) { return; }
+        if (name.Length == 0 || IsTempOrVariable(name)) { return; }
         var toId = IdentifierRules.NormalizeId(schema, name, "tsql");
-        _dependencies.Add(new ObjectDep { FromObjectId = _currentObjectId, ToObjectId = toId, Kind = "select" });
+        _dependencies.Add(new ObjectDep { FromObjectId = _currentObjectId, ToObjectId = toId, Kind = "read" });
+    }
+
+    /// <summary>#temp tables and @table variables must be excluded from CRUD/dependency tracking —
+    /// otherwise the CRUD matrix fills with noise for scratch state that isn't a real schema object.</summary>
+    private static bool IsTempOrVariable(string name) => name.Length > 0 && (name[0] == '#' || name[0] == '@');
+
+    // Alias -> real (schema,name), built per UPDATE/DELETE from its FromClause. T-SQL lets the SET
+    // target be an alias defined in FROM (UPDATE t SET ... FROM Orders AS t); without this map the
+    // write is attributed to a table literally named "t".
+    private static Dictionary<string, SchemaObjectName> BuildAliasMap(FromClause? from)
+    {
+        var map = new Dictionary<string, SchemaObjectName>(StringComparer.OrdinalIgnoreCase);
+        if (from is null) { return map; }
+        foreach (var tr in from.TableReferences) { CollectAliases(tr, map); }
+        return map;
+    }
+
+    private static void CollectAliases(TableReference tr, Dictionary<string, SchemaObjectName> map)
+    {
+        if (tr is NamedTableReference ntr && ntr.Alias is { } a) { map[a.Value] = ntr.SchemaObject; }
+        if (tr is QualifiedJoin qj) { CollectAliases(qj.FirstTableReference, map); CollectAliases(qj.SecondTableReference, map); }
     }
 
     public override void Visit(ExecuteStatement node)
@@ -248,26 +278,71 @@ internal sealed class TSqlFactsVisitor(string relPath) : TSqlFragmentVisitor
         node.AcceptChildren(this);
     }
 
-    public override void Visit(InsertStatement node) { RecordDmlTarget(node.InsertSpecification?.Target, "insert"); node.AcceptChildren(this); }
+    // Tracks the raw DML target node RecordDmlTarget already handled, so the generic child
+    // traversal doesn't ALSO visit it as an ordinary NamedTableReference. This matters most for
+    // "UPDATE o SET ... FROM Orders AS o": the Target's SchemaObject there is literally the alias
+    // "o" (1 part), and without this guard the traversal would record a bogus read dependency on a
+    // table named "o" alongside the correctly alias-resolved write to dbo.orders.
+    //
+    // GOTCHA: TSqlFragmentVisitor's base ExplicitVisit(T) always calls Visit(node) and THEN
+    // unconditionally calls node.AcceptChildren(this) itself, regardless of what Visit() does. So
+    // these DML visitors must NOT also call node.AcceptChildren(this) explicitly — doing so visits
+    // every child twice (once from the explicit call, once from the framework's automatic one),
+    // which duplicates every "read" dependency and — worse — re-visits Target a second time after
+    // any try/finally has already reset the skip guard. Just set the field; the framework's own
+    // single automatic pass is what actually walks FROM/WHERE/etc.
+    private TableReference? _dmlTargetToSkip;
+
+    public override void Visit(InsertStatement node)
+    {
+        var target = node.InsertSpecification?.Target;
+        RecordDmlTarget(target, "insert", null);
+        _dmlTargetToSkip = target;
+    }
 
     public override void Visit(UpdateStatement node)
     {
-        RecordDmlTarget(node.UpdateSpecification?.Target, "update");
-        if (_currentObjectId is not null && node.UpdateSpecification?.WhereClause is null)
+        var spec = node.UpdateSpecification;
+        RecordDmlTarget(spec?.Target, "update", spec?.FromClause);
+        if (_currentObjectId is not null && spec?.WhereClause is null)
         {
             _dependencies.Add(new ObjectDep { FromObjectId = _currentObjectId, Kind = "update-nowhere" });
         }
-        node.AcceptChildren(this);
+        _dmlTargetToSkip = spec?.Target;
     }
 
     public override void Visit(DeleteStatement node)
     {
-        RecordDmlTarget(node.DeleteSpecification?.Target, "delete");
-        if (_currentObjectId is not null && node.DeleteSpecification?.WhereClause is null)
+        var spec = node.DeleteSpecification;
+        RecordDmlTarget(spec?.Target, "delete", spec?.FromClause);
+        if (_currentObjectId is not null && spec?.WhereClause is null)
         {
             _dependencies.Add(new ObjectDep { FromObjectId = _currentObjectId, Kind = "delete-nowhere" });
         }
-        node.AcceptChildren(this);
+        _dmlTargetToSkip = spec?.Target;
+    }
+
+    /// <summary>MERGE writes its target via WHEN [NOT] MATCHED action clauses, producing C/U/D
+    /// simultaneously depending on which actions are present.</summary>
+    public override void Visit(MergeStatement node)
+    {
+        var spec = node.MergeSpecification;
+        if (_currentObjectId is null || spec?.Target is not NamedTableReference ntr) { _dmlTargetToSkip = spec?.Target; return; }
+        var (schema, name) = SplitSchemaObjectName(ntr.SchemaObject);
+        if (name.Length == 0 || IsTempOrVariable(name)) { _dmlTargetToSkip = spec.Target; return; }
+        var toId = IdentifierRules.NormalizeId(schema, name, "tsql");
+        foreach (var clause in spec.ActionClauses)
+        {
+            var kind = clause.Action switch
+            {
+                InsertMergeAction => "insert",
+                UpdateMergeAction => "update",
+                DeleteMergeAction => "delete",
+                _ => "",
+            };
+            if (kind.Length > 0) { _dependencies.Add(new ObjectDep { FromObjectId = _currentObjectId, ToObjectId = toId, Kind = kind }); }
+        }
+        _dmlTargetToSkip = spec.Target; // still records USING-source reads via the framework's own AcceptChildren pass
     }
 
     public override void Visit(SelectStarExpression node)
@@ -278,11 +353,14 @@ internal sealed class TSqlFactsVisitor(string relPath) : TSqlFragmentVisitor
         }
     }
 
-    private void RecordDmlTarget(TableReference? target, string kind)
+    private void RecordDmlTarget(TableReference? target, string kind, FromClause? from)
     {
         if (_currentObjectId is null || target is not NamedTableReference ntr) { return; }
-        var (schema, name) = SplitSchemaObjectName(ntr.SchemaObject);
-        if (name.Length == 0) { return; }
+        var son = ntr.SchemaObject;
+        if (son.Identifiers.Count == 1 && from is not null
+            && BuildAliasMap(from).TryGetValue(son.Identifiers[0].Value, out var real)) { son = real; }
+        var (schema, name) = SplitSchemaObjectName(son);
+        if (name.Length == 0 || IsTempOrVariable(name)) { return; }
         var toId = IdentifierRules.NormalizeId(schema, name, "tsql");
         _dependencies.Add(new ObjectDep { FromObjectId = _currentObjectId, ToObjectId = toId, Kind = kind });
     }
@@ -306,27 +384,25 @@ internal sealed class TSqlFactsVisitor(string relPath) : TSqlFragmentVisitor
     }
 }
 
-/// <summary>Detects dynamic SQL built from concatenated variables reaching EXEC/sp_executesql —
-/// the SQL0002 injection-risk signal (Phase 4 consumes ObjectDep{Kind="exec-dynamic"}).</summary>
+/// <summary>Detects dynamic SQL built from concatenation reaching EXEC(...) — the SQL0002
+/// injection-risk signal (CrudMatrix/Phase 4 consume ObjectDep{Kind="exec-dynamic"}).
+///
+/// GOTCHA: EXEC('literal' + @var) is NOT parsed as a single scalar expression containing a
+/// BinaryExpression — ScriptDom's EXEC(...) grammar treats the top-level '+' as its own list
+/// separator, so 'literal' and @var arrive as two SEPARATE entries in ExecutableStringList.Strings
+/// (verified empirically: a single-item Strings list is a static EXEC('literal') or EXEC(@var); a
+/// multi-item list only ever arises from '+'-joined concatenation). So Strings.Count > 1 IS the
+/// concatenation signal — checking for a nested BinaryExpression node (the previous approach) can
+/// never match any real T-SQL and was dead code.</summary>
 internal sealed class DynamicSqlWalker(string objectId) : TSqlFragmentVisitor
 {
     public List<ObjectDep> InjectionRiskDeps { get; } = [];
 
     public override void Visit(ExecuteStatement node)
     {
-        if (node.ExecuteSpecification?.ExecutableEntity is ExecutableStringList list)
+        if (node.ExecuteSpecification?.ExecutableEntity is ExecutableStringList { Strings.Count: > 1 })
         {
-            foreach (var s in list.Strings)
-            {
-                if (ContainsConcatenation(s))
-                {
-                    InjectionRiskDeps.Add(new ObjectDep { FromObjectId = objectId, Kind = "exec-dynamic" });
-                    break;
-                }
-            }
+            InjectionRiskDeps.Add(new ObjectDep { FromObjectId = objectId, Kind = "exec-dynamic" });
         }
     }
-
-    private static bool ContainsConcatenation(ScalarExpression expr) =>
-        expr is BinaryExpression { BinaryExpressionType: BinaryExpressionType.Add };
 }

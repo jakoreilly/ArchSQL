@@ -14,6 +14,11 @@ public sealed record CliOptions
     public List<string> FailOn { get; init; } = [];
     /// <summary>Optional path to write a SARIF 2.1.0 log; null = don't write one.</summary>
     public string? SarifPath { get; init; }
+    /// <summary>Set only by the `connect` verb: a live SQL Server connection string. null = scan
+    /// files (the default path). Never persisted, rendered, or logged (secret).</summary>
+    public string? ConnectionString { get; init; }
+    /// <summary>Connection/command timeout in seconds for the live source.</summary>
+    public int TimeoutSeconds { get; init; } = 30;
 
     public static CliOptions? Parse(string[] args, out int exitCode)
     {

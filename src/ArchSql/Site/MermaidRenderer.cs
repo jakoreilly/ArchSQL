@@ -38,7 +38,7 @@ public static class MermaidRenderer
     public static string BuildDependencies(SqlModel model, int maxNodes)
     {
         var objects = model.Objects;
-        var deps = model.Dependencies.Where(d => d.ToObjectId.Length > 0 && d.Kind is "select" or "insert" or "update" or "delete" or "exec" or "fk").ToList();
+        var deps = model.Dependencies.Where(d => d.ToObjectId.Length > 0 && d.Kind is "read" or "insert" or "update" or "delete" or "exec" or "fk").ToList();
         var (shown, _) = Cap(objects, deps, maxNodes);
         var shownIds = shown.Select(o => o.Id).ToHashSet(StringComparer.Ordinal);
 

@@ -1,0 +1,153 @@
+{
+  "rootName": "projects",
+  "sourcePath": "projects",
+  "files": [
+    {
+      "relPath": "live/dbo.Notes",
+      "slug": "live_dbo_Notes",
+      "dialect": "tsql",
+      "sizeBytes": 222,
+      "loc": 7,
+      "statementCount": 1,
+      "parsedCleanly": true,
+      "objectIds": [
+        "dbo.notes"
+      ],
+      "hasCredential": false,
+      "purpose": "1 table"
+    }
+  ],
+  "objects": [
+    {
+      "id": "dbo.notes",
+      "schema": "dbo",
+      "name": "Notes",
+      "kind": "table",
+      "dialect": "tsql",
+      "definedInSlug": "live_dbo_Notes",
+      "definedAtLine": 1,
+      "columns": [
+        {
+          "name": "Id",
+          "dataType": "int",
+          "nullable": false,
+          "isIdentity": true,
+          "default": "",
+          "maxLength": 4,
+          "precision": 10,
+          "scale": 0,
+          "collation": ""
+        },
+        {
+          "name": "Description",
+          "dataType": "nvarchar",
+          "nullable": false,
+          "isIdentity": false,
+          "default": "",
+          "maxLength": -1,
+          "precision": 0,
+          "scale": 0,
+          "collation": "SQL_Latin1_General_CP1_CI_AS"
+        },
+        {
+          "name": "DateCreated",
+          "dataType": "datetime2",
+          "nullable": false,
+          "isIdentity": false,
+          "default": "",
+          "maxLength": 8,
+          "precision": 27,
+          "scale": 7,
+          "collation": ""
+        },
+        {
+          "name": "Deleted",
+          "dataType": "bit",
+          "nullable": false,
+          "isIdentity": false,
+          "default": "",
+          "maxLength": 1,
+          "precision": 1,
+          "scale": 0,
+          "collation": ""
+        }
+      ],
+      "primaryKey": [
+        "Id"
+      ],
+      "indexes": [],
+      "referencesObjectIds": [],
+      "cyclomatic": 1,
+      "statementCount": 0,
+      "body": "",
+      "indexDetails": [
+        {
+          "name": "PK_Notes",
+          "objectId": "dbo.notes",
+          "keyColumns": [
+            "Id"
+          ],
+          "includedColumns": [],
+          "isUnique": true,
+          "isPrimaryKey": true,
+          "isClustered": true,
+          "isDisabled": false
+        }
+      ],
+      "rowCount": 1,
+      "reservedKb": 72,
+      "codeFlags": {
+        "usesNolock": false,
+        "usesCursor": false,
+        "usesAtAtIdentity": false,
+        "hasSetNoCount": false,
+        "usesExecuteAs": false
+      }
+    }
+  ],
+  "foreignKeys": [],
+  "dependencies": [],
+  "findings": [
+    {
+      "ruleId": "SQL0015",
+      "severity": 3,
+      "title": "Unbounded or very wide column",
+      "message": "dbo.Notes.Description has no length bound (nvarchar(max)).",
+      "objectId": "dbo.notes",
+      "slug": "live_dbo_Notes",
+      "line": 1
+    }
+  ],
+  "diagnostics": [],
+  "dialectLoc": {
+    "tsql": 7
+  },
+  "dialect": "tsql",
+  "crud": [],
+  "runtime": {
+    "source": "live-mssql",
+    "available": true,
+    "note": "0 object(s) with execution stats, 0 missing-index suggestion(s), 0 unused index(es). Counters are cumulative since SQL Server statistics last reset (not a fixed time window) and clear on restart.",
+    "objectStats": [],
+    "indexStats": [
+      {
+        "objectId": "dbo.notes",
+        "indexName": "PK_Notes",
+        "userSeeks": 0,
+        "userScans": 0,
+        "userLookups": 0,
+        "userUpdates": 0,
+        "isUnused": false
+      }
+    ],
+    "missingIndexes": [],
+    "maintenance": {
+      "available": true,
+      "note": "Backup history could not be read. 0 statistics object(s) and 0 index(es) at or above 30% fragmentation are listed below.",
+      "daysSinceLastBackup": null,
+      "staleStatistics": [],
+      "fragmentedIndexes": []
+    }
+  },
+  "schemaVersion": 5
+}

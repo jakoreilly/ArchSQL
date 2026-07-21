@@ -18,7 +18,6 @@ cd /d "%~dp0"
 set "CONN=%~1"
 if "%CONN%"=="" set "CONN=conn.txt"
 set "OUT=%~2"
-if "%OUT%"=="" set "OUT=site-live"
 
 if not exist "%CONN%" (
   echo error: connection file "%CONN%" not found. Create it next to this script.
@@ -32,8 +31,14 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo Connecting and generating site into "%OUT%"...
-dotnet run --project src\ArchSql --no-build -- connect --conn-file "%CONN%" --out "%OUT%"
+if "%OUT%"=="" (  
+  echo Connecting and generating site...
+  dotnet run --project src\ArchSql --no-build -- connect --conn-file "%CONN%"
+)
+else (
+  echo Connecting and generating site into "%OUT%"...
+  dotnet run --project src\ArchSql --no-build -- connect --conn-file "%CONN%" --out "%OUT%"
+)
 set "RC=%errorlevel%"
 
 if "%RC%"=="0" (

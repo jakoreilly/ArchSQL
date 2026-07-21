@@ -3,15 +3,14 @@ using ArchSql.Model;
 namespace ArchSql.Analysis;
 
 /// <summary>A lint rule: metadata plus a pure function producing findings from the resolved
-/// model. Rules are registered in a list, not a switch (Hard Constraint 5, cognitive complexity),
-/// mirroring ArchDiagram's RefactoringBacklog composition idiom.</summary>
+/// model. Rules are registered in a list, not a switch, to keep cognitive complexity low and make
+/// adding a rule a one-line, self-contained change.</summary>
 public sealed record SqlRule(string Id, int Severity, string Category, string Title, string Why, string Tip);
 
 public static class SqlRules
 {
-    /// <summary>Sonar gate for procedure cyclomatic complexity — matches ArchDiagram's
-    /// Severity.SonarGate=15 (same threshold, independently duplicated per Hard Constraint:
-    /// Analysis must not depend on a future Site layer constant).</summary>
+    /// <summary>Static-analysis gate for procedure cyclomatic complexity. Defined here so the
+    /// Analysis layer does not depend on a Site-layer constant.</summary>
     public const int ComplexityGate = 15;
 
     public static readonly IReadOnlyList<(SqlRule Rule, Func<SqlModel, IEnumerable<LintFinding>> Check)> Rules =
@@ -362,7 +361,7 @@ public static class SqlRules
         "SQL0021", 1, o => $"{o.Schema}.{o.Name} contains EXECUTE AS.");
 
     private static List<LintFinding> CheckMissingSetNoCount(SqlModel model) =>
-        model.Objects.Where(o => o.Kind == "procedure" && !o.CodeFlags.HasSetNoCount)
+        model.Objects.Where(o => o.Kind == "procedure" && o.CodeFlags.Scanned && !o.CodeFlags.HasSetNoCount)
             .Select(o => ForObject(model, o.Id, "SQL0020", 3, $"{o.Schema}.{o.Name} does not SET NOCOUNT ON."))
             .ToList();
 

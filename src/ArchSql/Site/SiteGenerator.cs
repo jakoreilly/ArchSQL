@@ -7,8 +7,8 @@ using System.Reflection;
 
 namespace ArchSql.Site;
 
-/// <summary>Orchestrates static-site output: one WritePage call per page, copies ArchDiagram's
-/// SiteGenerator idiom exactly (UTF-8 no BOM, PageTemplate.Render, relRoot convention).</summary>
+/// <summary>Orchestrates static-site output: one WritePage call per page (UTF-8 no BOM,
+/// PageTemplate.Render, relRoot convention).</summary>
 public static class SiteGenerator
 {
     private static readonly UTF8Encoding Utf8NoBom = new(encoderShouldEmitUTF8Identifier: false);

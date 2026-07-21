@@ -1,9 +1,9 @@
 namespace ArchSql.Analysis;
 
 /// <summary>Heuristic dialect detection by marker-token scoring — a linear scan, no
-/// backtracking-capable regex (Hard Constraint 6). v1 only deep-analyzes "tsql"; files scored as
+/// backtracking-capable regex. Only "tsql" is deep-analyzed; files scored as
 /// mysql/postgres are still detected (so a mixed folder doesn't silently mis-scan) but are
-/// recorded with ParsedCleanly=false and a diagnostic explaining only T-SQL is analyzed in v1.</summary>
+/// recorded with ParsedCleanly=false and a diagnostic explaining only T-SQL is deep-analyzed.</summary>
 public static class DialectDetector
 {
     public static string Detect(string content, string forced)

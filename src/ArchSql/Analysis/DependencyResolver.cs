@@ -4,8 +4,8 @@ namespace ArchSql.Analysis;
 
 /// <summary>Resolves object-to-object references across files: for every ForeignKey/ObjectDep
 /// whose target wasn't known at parse time (single-file scope), looks up the real object by Id
-/// and either fills ToObjectId or records ExternalTarget. Copies ArchDiagram's ImportResolver
-/// shape. Pure/deterministic — same input always resolves the same way.</summary>
+/// and either fills ToObjectId or records ExternalTarget.
+/// Pure/deterministic — same input always resolves the same way.</summary>
 public static class DependencyResolver
 {
     public static SqlModel Resolve(SqlModel model)

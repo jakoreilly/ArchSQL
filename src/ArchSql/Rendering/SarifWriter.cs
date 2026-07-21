@@ -5,8 +5,8 @@ namespace ArchSql.Rendering;
 
 /// <summary>SARIF 2.1.0 output mapping every LintFinding to a SARIF result. Uses its own
 /// JsonSerializerOptions (not the camelCase model options) because SARIF keys like "$schema" are
-/// case-sensitive — copies ArchDiagram's SarifWriter idiom exactly, including building the top
-/// level as a Dictionary&lt;string,object&gt; (not an anonymous type) so "$schema" can be a key.</summary>
+/// case-sensitive. The top level is built as a Dictionary&lt;string,object&gt; (not an anonymous
+/// type) so "$schema" can be a key.</summary>
 public static class SarifWriter
 {
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };

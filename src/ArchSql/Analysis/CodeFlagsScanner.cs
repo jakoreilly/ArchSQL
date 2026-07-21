@@ -11,14 +11,52 @@ public static class CodeFlagsScanner
     {
         if (string.IsNullOrEmpty(source)) { return new CodeFlags(); }
         var tokens = Tokenize(source);
+        var codeTokens = Tokenize(StripCommentsAndStrings(source));
         return new CodeFlags
         {
+            Scanned = true,
             UsesNolock = tokens.Contains("NOLOCK") || HasAdjacent(tokens, "READ", "UNCOMMITTED"),
             UsesCursor = tokens.Contains("CURSOR"),
             UsesAtAtIdentity = tokens.Contains("@@IDENTITY"),
             HasSetNoCount = HasAdjacent(tokens, "SET", "NOCOUNT", "ON"),
-            UsesExecuteAs = HasAdjacent(tokens, "EXECUTE", "AS") || HasAdjacent(tokens, "EXEC", "AS"),
+            UsesExecuteAs = ContainsExecuteAs(codeTokens),
         };
+    }
+
+    private static bool ContainsExecuteAs(List<string> tokens) =>
+        HasAdjacent(tokens, "EXECUTE", "AS") || HasAdjacent(tokens, "EXEC", "AS");
+
+    /// <summary>Blanks out line comments (--…), block comments (/*…*/) and single-quoted string
+    /// bodies so a keyword appearing only in a comment or literal is not mistaken for code. Linear,
+    /// no regex; unterminated constructs are blanked to end-of-input.</summary>
+    private static string StripCommentsAndStrings(string source)
+    {
+        var sb = new System.Text.StringBuilder(source.Length);
+        var i = 0;
+        while (i < source.Length)
+        {
+            var c = source[i];
+            var next = i + 1 < source.Length ? source[i + 1] : '\0';
+            if (c == '-' && next == '-')
+            {
+                while (i < source.Length && source[i] != '\n') { sb.Append(' '); i++; }
+            }
+            else if (c == '/' && next == '*')
+            {
+                sb.Append("  "); i += 2;
+                while (i < source.Length && !(source[i] == '*' && i + 1 < source.Length && source[i + 1] == '/'))
+                { sb.Append(source[i] == '\n' ? '\n' : ' '); i++; }
+                if (i < source.Length) { sb.Append("  "); i += 2; }
+            }
+            else if (c == '\'')
+            {
+                sb.Append(' '); i++;
+                while (i < source.Length && source[i] != '\'') { sb.Append(source[i] == '\n' ? '\n' : ' '); i++; }
+                if (i < source.Length) { sb.Append(' '); i++; }
+            }
+            else { sb.Append(c); i++; }
+        }
+        return sb.ToString();
     }
 
     /// <summary>Splits source into uppercased identifier-like tokens (letters, digits, '@', '_'),

@@ -2,7 +2,7 @@ namespace ArchSql.Analysis;
 
 /// <summary>The single place cross-dialect identifier normalization happens. Every caller that
 /// needs to key or look up a DbObject.Id MUST go through NormalizeId — never concatenate
-/// schema+name directly (enforced by a grep in the Phase 1 Definition of Done).
+/// schema+name directly.
 ///
 /// The three engines disagree on identifier case: T-SQL is case-insensitive by collation and
 /// delimits with [brackets] or "quotes"; PostgreSQL folds UNQUOTED identifiers to lowercase and

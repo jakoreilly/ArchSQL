@@ -5,7 +5,7 @@ namespace ArchSql.Rendering;
 
 /// <summary>Upgrades a deserialized model to the current schema version, filling collections added
 /// in later versions with empty defaults. A v1 file has SchemaVersion == 0. Reject anything newer
-/// than we understand (Hard Constraint: never crash mid-run — this is a clean, early failure).</summary>
+/// than this build understands — fail cleanly and early rather than crashing mid-run.</summary>
 public static class ModelUpgrader
 {
     public static SqlModel Upgrade(SqlModel model)

@@ -10,12 +10,18 @@ public static class IndexAnalysis
     public sealed record DuplicatePair(string ObjectId, string IndexA, string IndexB, string Relationship);
     public sealed record UnusedIndex(string ObjectId, string IndexName, long UserUpdates, string DropStatement);
 
-    /// <summary>Tables with at least one column but no clustered index recorded — a heap.</summary>
-    public static List<DbObject> Heaps(SqlModel model) =>
-        model.Objects
-            .Where(o => o.Kind == "table" && o.Columns.Count > 0 && o.IndexDetails.Count > 0
+    /// <summary>Tables with columns but no clustered index — a heap. Returns nothing when the run
+    /// captured no index inventory at all (a file scan, or a login without catalog access), so a
+    /// heap is only reported when index detail was genuinely read.</summary>
+    public static List<DbObject> Heaps(SqlModel model)
+    {
+        var indexDetailCaptured = model.Objects.Any(o => o.IndexDetails.Count > 0);
+        if (!indexDetailCaptured) { return []; }
+        return model.Objects
+            .Where(o => o.Kind == "table" && o.Columns.Count > 0
                 && !o.IndexDetails.Any(i => i.IsClustered))
             .ToList();
+    }
 
     /// <summary>Pairs of indexes on the same table whose key-column lists are equal, or where one is
     /// an ordered prefix of the other — duplicate or redundant coverage.</summary>
@@ -56,14 +62,15 @@ public static class IndexAnalysis
     {
         if (!model.Runtime.Available) { return []; }
         var byId = model.Objects.ToDictionary(o => o.Id, StringComparer.Ordinal);
+        var statByKey = new Dictionary<(string ObjectId, string IndexName), IndexStat>();
+        foreach (var s in model.Runtime.IndexStats) { statByKey.TryAdd((s.ObjectId, s.IndexName), s); }
         var result = new List<UnusedIndex>();
         foreach (var o in model.Objects)
         {
             foreach (var idx in o.IndexDetails)
             {
                 if (idx.IsPrimaryKey || idx.IsDisabled) { continue; }
-                if (!model.Runtime.IndexStats.Any(s => s.ObjectId == o.Id && s.IndexName == idx.Name && s.IsUnused)) { continue; }
-                var usage = model.Runtime.IndexStats.First(s => s.ObjectId == o.Id && s.IndexName == idx.Name);
+                if (!statByKey.TryGetValue((o.Id, idx.Name), out var usage) || !usage.IsUnused) { continue; }
                 var drop = $"DROP INDEX [{idx.Name}] ON [{byId[o.Id].Schema}].[{byId[o.Id].Name}];";
                 result.Add(new UnusedIndex(o.Id, idx.Name, usage.UserUpdates, drop));
             }

@@ -32,7 +32,7 @@ public sealed class TSqlScriptDomAnalyzer : ISqlDialectAnalyzer
 }
 
 /// <summary>Walks a parsed T-SQL fragment collecting objects, foreign keys, and intra-file
-/// dependencies. Each Visit override is small (Hard Constraint 5, cognitive complexity).</summary>
+/// dependencies. Each Visit override is kept small to limit cognitive complexity.</summary>
 internal sealed class TSqlFactsVisitor(string relPath) : TSqlFragmentVisitor
 {
     private readonly List<DbObject> _objects = [];
@@ -147,7 +147,7 @@ internal sealed class TSqlFactsVisitor(string relPath) : TSqlFragmentVisitor
         _foreignKeys.Add(new ForeignKey
         {
             FromObjectId = fromObjectId,
-            ToObjectId = toId, // resolved for real (empty when unresolved) in Phase 3's DependencyResolver
+            ToObjectId = toId, // resolved later by DependencyResolver (empty when unresolved)
             FromColumns = fk.Columns.Select(c => c.Value).ToList(),
             ToColumns = fk.ReferencedTableColumns.Select(c => c.Value).ToList(),
             Name = fk.ConstraintIdentifier?.Value ?? "",
@@ -258,8 +258,8 @@ internal sealed class TSqlFactsVisitor(string relPath) : TSqlFragmentVisitor
     public override void Visit(CreateLoginStatement node)
     {
         _statementCount++;
-        // A password-based login source embeds a credential (Hard Constraint 2: capture the
-        // FACT only — the Literal value itself is never read into HasCredential).
+        // A password-based login source embeds a credential; record only that fact —
+        // the literal value itself is never read into HasCredential.
         if (node.Source is PasswordCreateLoginSource) { _hasCredential = true; }
     }
 
@@ -395,7 +395,7 @@ internal sealed class TSqlFactsVisitor(string relPath) : TSqlFragmentVisitor
 
     /// <summary>Flags SQL0002 precursor data: a dynamic-SQL EXEC/sp_executesql whose argument is
     /// built from string concatenation (+ / CONCAT) of a variable rather than a static literal.
-    /// This is a report about the SCANNED sql, never executed here (Hard Constraint 1).</summary>
+    /// This is a report about the scanned SQL; nothing here is ever executed.</summary>
     private void DetectCredentialAndInjection(CreateProcedureStatement node, string objectId)
     {
         var walker = new DynamicSqlWalker(objectId);
@@ -413,7 +413,7 @@ internal sealed class TSqlFactsVisitor(string relPath) : TSqlFragmentVisitor
 }
 
 /// <summary>Detects dynamic SQL built from concatenation reaching EXEC(...) — the SQL0002
-/// injection-risk signal (CrudMatrix/Phase 4 consume ObjectDep{Kind="exec-dynamic"}).
+/// injection-risk signal (CrudMatrix and the lint rules consume ObjectDep{Kind="exec-dynamic"}).
 ///
 /// GOTCHA: EXEC('literal' + @var) is NOT parsed as a single scalar expression containing a
 /// BinaryExpression — ScriptDom's EXEC(...) grammar treats the top-level '+' as its own list

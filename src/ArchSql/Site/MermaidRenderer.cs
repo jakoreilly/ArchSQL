@@ -4,8 +4,7 @@ using ArchSql.Model;
 namespace ArchSql.Site;
 
 /// <summary>Builds Mermaid diagram source for the ER and object-dependency views. Diagrams are
-/// capped at maxNodes (by fan-in+fan-out, most-connected first) for readability, matching
-/// ArchDiagram's trim behaviour.</summary>
+/// capped at maxNodes (by fan-in+fan-out, most-connected first) for readability.</summary>
 public static class MermaidRenderer
 {
     public static string BuildEr(SqlModel model, int maxNodes)

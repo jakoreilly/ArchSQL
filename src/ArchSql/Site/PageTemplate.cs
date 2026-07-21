@@ -8,8 +8,8 @@ public static class Html
 }
 
 /// <summary>Shared page shell: sidebar navigation, breadcrumbs, theme toggle, local asset
-/// references only (works from file:// with no network). Copies ArchDiagram's PageTemplate
-/// verbatim — same theme localStorage keys, same DOM ids, so the vendored site.js/site.css work
+/// references only (works from file:// with no network). Matches the vendored site.js/site.css
+/// contract — same theme localStorage keys, same DOM ids, so those assets work
 /// unmodified.</summary>
 public static class PageTemplate
 {
@@ -92,8 +92,8 @@ public static class PageTemplate
     }
 
     /// <summary>One interactive diagram card: toolbar (zoom/reset/PNG), pan/zoom stage, the
-    /// mermaid source. Copies ArchDiagram's DiagramBlock (adjacency/tooltips omitted — v1 has
-    /// no 3D graph or hover-trace data to feed them).</summary>
+    /// mermaid source. Adjacency/tooltips are omitted — there is no 3D graph or hover-trace data
+    /// to feed them.</summary>
     public static string DiagramBlock(string id, string mermaidSource)
     {
         return $"""

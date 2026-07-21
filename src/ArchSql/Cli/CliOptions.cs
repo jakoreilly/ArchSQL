@@ -57,8 +57,8 @@ public sealed record CliOptions
         string? baselinePath = null;
 
         // Flags grouped by shape (no-value boolean vs. single-value), one branch per SHAPE
-        // rather than one per flag (keeps cognitive complexity low — copies CliOptions.Parse
-        // in ArchDiagram). --max-nodes and --fail-on keep their own branch: both need extra
+        // rather than one per flag (keeps cognitive complexity low). --max-nodes and --fail-on
+        // keep their own branch: both need extra
         // validation beyond "does a value follow".
         var boolFlags = new Dictionary<string, Action>(StringComparer.Ordinal)
         {

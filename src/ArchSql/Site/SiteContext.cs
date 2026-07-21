@@ -4,7 +4,7 @@ using ArchSql.Model;
 namespace ArchSql.Site;
 
 /// <summary>Precomputed, shared-across-pages view of a SqlModel: lookups, fan-in/out, scorecard.
-/// Built once per site generation so pages never recompute (copies ArchDiagram's SiteContext).</summary>
+/// Built once per site generation so pages never recompute.</summary>
 public sealed class SiteContext
 {
     public required SqlModel Model { get; init; }

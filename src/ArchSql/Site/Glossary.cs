@@ -3,7 +3,7 @@ using System.Text.Json;
 namespace ArchSql.Site;
 
 /// <summary>Term -> plain-English explanation, rendered into the page's circled-i popovers by
-/// site.js (reads #arch-glossary). Copies ArchDiagram's Glossary idiom.</summary>
+/// site.js (reads #arch-glossary).</summary>
 public static class Glossary
 {
     private static readonly Dictionary<string, string> Terms = new(StringComparer.OrdinalIgnoreCase)

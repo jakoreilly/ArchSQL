@@ -4,11 +4,11 @@ namespace ArchSql.Model;
 /// bumps; ModelUpgrader.Upgrade backfills anything older.</summary>
 public static class SchemaVersions
 {
-    public const int Current = 5;
+    public const int Current = 6;
 }
 
 /// <summary>Root of everything ArchSql learned about a folder of SQL. Serialized verbatim to
-/// model.json (round-trippable, drives --from-model), same contract as ArchDiagram's ProjectModel.</summary>
+/// model.json (round-trippable, drives --from-model).</summary>
 public sealed record SqlModel
 {
     public required string RootName { get; init; }
@@ -17,8 +17,8 @@ public sealed record SqlModel
     public List<DbObject> Objects { get; init; } = [];
     public List<ForeignKey> ForeignKeys { get; init; } = [];
     public List<ObjectDep> Dependencies { get; init; } = [];
-    /// <summary>Populated in Phase 4; the field lives here now (additive interfaces) so the
-    /// site/JSON layers need no change when linting lands.</summary>
+    /// <summary>Populated by the lint pass; the field lives here so the site/JSON layers need no
+    /// change to carry findings.</summary>
     public List<LintFinding> Findings { get; init; } = [];
     public List<string> Diagnostics { get; init; } = [];
     public Dictionary<string, int> DialectLoc { get; init; } = [];
@@ -129,7 +129,7 @@ public sealed record MissingIndex
     public double ImpactScore { get; init; }
 }
 
-/// <summary>One scanned .sql file. Slug de-duped exactly like ArchDiagram (Pipeline.MakeSlug).</summary>
+/// <summary>One scanned .sql file. Slug de-duped by Pipeline.MakeSlug.</summary>
 public sealed record SqlFile
 {
     public required string RelPath { get; init; }
@@ -142,7 +142,7 @@ public sealed record SqlFile
     /// <summary>False when only the Tier-1 fallback ran, or the deep parse hit errors.</summary>
     public bool ParsedCleanly { get; init; }
     public List<string> ObjectIds { get; init; } = [];
-    /// <summary>Secret FACT only — never the value (Hard Constraint 2).</summary>
+    /// <summary>Records only that a credential is present, never its value.</summary>
     public bool HasCredential { get; init; }
     public string Purpose { get; init; } = "";
 }
@@ -177,7 +177,7 @@ public sealed record DbObject
     public long RowCount { get; init; }
     /// <summary>Reserved storage in kilobytes, from partition statistics. 0 when not captured.</summary>
     public long ReservedKb { get; init; }
-    /// <summary>Body-level code characteristics detected during analysis (Phase C1). Absent
+    /// <summary>Body-level code characteristics detected during analysis. Absent
     /// (all false) when the object has no body or wasn't deep-parsed.</summary>
     public CodeFlags CodeFlags { get; init; } = new();
 }
@@ -221,6 +221,10 @@ public sealed record CodeFlags
     public bool UsesAtAtIdentity { get; init; }
     public bool HasSetNoCount { get; init; }
     public bool UsesExecuteAs { get; init; }
+    /// <summary>True when the object's body was actually tokenized. False (the default) means no
+    /// body was available or it was skipped (non-T-SQL, or over the deep-analysis size limit) —
+    /// rules that report an absence (e.g. missing SET NOCOUNT ON) must check this first.</summary>
+    public bool Scanned { get; init; }
 }
 
 public sealed record ForeignKey
@@ -246,7 +250,7 @@ public sealed record ObjectDep
     public required string Kind { get; init; }
 }
 
-/// <summary>A lint finding (Phase 4).</summary>
+/// <summary>A lint finding.</summary>
 public sealed record LintFinding
 {
     public required string RuleId { get; init; }

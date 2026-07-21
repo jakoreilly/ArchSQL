@@ -32,6 +32,7 @@ page, reconnect with a login that has <code>VIEW DATABASE STATE</code>.</p>
 <p class="note">{Html.Encode(rt.Note.Length == 0 ? "Built from a file scan." : rt.Note)}</p>
 </div>
 """);
+            if (rt.Maintenance.Available) { AppendMaintenance(sb, ctx, rt); }
             return sb.ToString();
         }
 
@@ -176,7 +177,7 @@ page, reconnect with a login that has <code>VIEW DATABASE STATE</code>.</p>
         {
             sb.Append("""<div class="panel empty-state"><p>No missing or unused indexes were reported.</p></div>""");
         }
-        sb.Append("""<p class="note">Impact is the server's own benefit estimate; unused-index drops should be confirmed across a full workload cycle (e.g. month-end jobs) before acting.</p>""");
+        sb.Append("""<p class="note">Impact is the server's own benefit estimate; unused-index drops should be confirmed across a full workload cycle before acting.</p>""");
     }
 
     private static void AppendIssueConcentration(StringBuilder sb, SqlModel model, RuntimeStats rt)

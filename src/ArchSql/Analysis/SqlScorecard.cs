@@ -2,8 +2,7 @@ using ArchSql.Model;
 
 namespace ArchSql.Analysis;
 
-/// <summary>Health scorecard. Copies ArchDiagram's ScorecardBuilder idiom (worst-wins grading).
-/// Stub in Phase 1 so SqlCiGate compiles; full rows populated in Phase 4.</summary>
+/// <summary>Health scorecard using worst-wins grading across the metric rows.</summary>
 public static class SqlScorecard
 {
     public enum Status { Ok, Watch, Fail, NA }
@@ -22,7 +21,7 @@ public static class SqlScorecard
             BuildComplexityRow(model),
             BuildDeadObjectRow(model),
         };
-        // Worst-wins: NA never worsens the grade (mirrors ArchDiagram's ScorecardBuilder).
+        // Worst-wins: NA never worsens the grade.
         var overall = rows.Select(r => r.Status).Where(s => s != Status.NA).DefaultIfEmpty(Status.Ok).Max();
         return new Card(rows, overall);
     }

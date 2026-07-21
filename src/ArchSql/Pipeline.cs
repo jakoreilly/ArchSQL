@@ -36,7 +36,7 @@ public static class Pipeline
         var results = new FileResult[units.Count];
         Parallel.For(0, units.Count, idx => { results[idx] = AnalyzeOne(units[idx], analyzers, options); });
 
-        // Serial reduce — order-dependent shared state (determinism, Hard Constraint 3).
+        // Serial reduce — order-dependent shared state, kept serial for deterministic output.
         var files = new List<SqlFile>(units.Count);
         var objects = new List<DbObject>();
         var foreignKeys = new List<ForeignKey>();
@@ -194,8 +194,8 @@ public static class Pipeline
             var analyzer = analyzers.FirstOrDefault(a => a.CanHandle(unit.Dialect));
             if (analyzer is null)
             {
-                // v1 only deep-analyzes T-SQL; mysql/postgres are detected but not parsed (Phase 2b, deferred).
-                diagnostics.Add($"{unit.RelPath}: detected as {unit.Dialect}; only T-SQL is analyzed in v1.");
+                // Only T-SQL is deep-analyzed; mysql/postgres are detected but not parsed.
+                diagnostics.Add($"{unit.RelPath}: detected as {unit.Dialect}; only T-SQL is deep-analyzed.");
                 facts = new SqlFileFacts { Dialect = unit.Dialect, ParsedCleanly = false, Diagnostics = diagnostics };
             }
             else

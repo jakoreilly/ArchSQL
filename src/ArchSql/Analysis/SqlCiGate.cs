@@ -1,8 +1,8 @@
 namespace ArchSql.Analysis;
 
-/// <summary>CI gate: maps a --fail-on gate name to the Scorecard row it reads. Copies
-/// ArchDiagram's CiGate idiom. Full Evaluate() logic lands in Phase 4 alongside SqlScorecard;
-/// KnownGates exists from Phase 1 so CliOptions.Parse can validate --fail-on immediately.</summary>
+/// <summary>CI gate: maps a --fail-on gate name to the Scorecard row it reads. KnownGates is
+/// independent of the scorecard so CliOptions.Parse can validate --fail-on before any analysis
+/// runs.</summary>
 public static class SqlCiGate
 {
     public static readonly Dictionary<string, string> KnownGates = new(StringComparer.OrdinalIgnoreCase)
@@ -14,8 +14,7 @@ public static class SqlCiGate
         ["scorecard"] = "",
     };
 
-    /// <summary>Returns failure reasons (empty = all pass). Real implementation added in Phase 4
-    /// once SqlScorecard.Card exists; until then this always passes (no false CI failures).</summary>
+    /// <summary>Returns failure reasons (empty = all pass), evaluated against the scorecard.</summary>
     public static List<string> Evaluate(IReadOnlyList<string> gates, SqlScorecard.Card card)
     {
         var reasons = new List<string>();

@@ -1,9 +1,9 @@
 namespace ArchSql.Analysis;
 
-/// <summary>Where schema comes from. v1 ships ONLY SqlFileSchemaSource (folder of .sql). A future
-/// LiveDbSchemaSource (MSSQL/MySQL/Postgres via information_schema / catalog views) would
-/// implement this same interface and slot into Pipeline with zero changes to the analysis/site
-/// layers. NOT implemented in v1 — see plan.md Scope decision D (live DB connections excluded).</summary>
+/// <summary>Where schema comes from. Implementations include a folder-of-.sql source and a live
+/// SQL Server catalog source; both implement this same interface and slot into Pipeline with zero
+/// changes to the analysis/site layers. Additional live sources (MySQL/Postgres via
+/// information_schema) can be added the same way.</summary>
 public interface ISchemaSource
 {
     /// <summary>Raw SQL text units to analyze, each with a logical path. For the file source

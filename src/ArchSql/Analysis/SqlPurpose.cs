@@ -2,8 +2,8 @@ using ArchSql.Model;
 
 namespace ArchSql.Analysis;
 
-/// <summary>Heuristic one-line purpose text for objects and files, table-driven (copies
-/// ArchDiagram's PurposeHeuristics idiom: NameConventions table, priority cascade).</summary>
+/// <summary>Heuristic one-line purpose text for objects and files, table-driven via a
+/// name-conventions table evaluated as a priority cascade.</summary>
 public static class SqlPurpose
 {
     private static readonly (string Prefix, string Purpose)[] NamePrefixConventions =

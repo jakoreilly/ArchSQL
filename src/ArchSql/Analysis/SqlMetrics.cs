@@ -2,8 +2,8 @@ using ArchSql.Model;
 
 namespace ArchSql.Analysis;
 
-/// <summary>Per-schema coupling and health signals. Pure static methods (Hard Constraint 8:
-/// coverage on new code ships with the logic).</summary>
+/// <summary>Per-schema coupling and health signals. Pure static methods so the logic is unit
+/// testable without a database.</summary>
 public static class SqlMetrics
 {
     public static Dictionary<string, int> FanIn(SqlModel model)
@@ -39,7 +39,7 @@ public static class SqlMetrics
 
     /// <summary>Cyclomatic complexity for a procedure/function/trigger body: 1 + count of
     /// decision-point keywords. Deliberately simple (statement-text counting, not a full CFG) —
-    /// matches the tokenizer-tier accuracy tradeoff documented in plan.md.</summary>
+    /// this matches the tokenizer-tier accuracy tradeoff used elsewhere in the analyzer.</summary>
     public static int Cyclomatic(string body)
     {
         if (string.IsNullOrEmpty(body)) { return 1; }

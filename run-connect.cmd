@@ -12,13 +12,16 @@ REM conn.txt must contain ONLY the connection string, e.g.:
 REM   Server=HOST;Database=DB;User ID=ro_user;Password=...;TrustServerCertificate=True
 REM Use a read-only login. Delete conn.txt when finished (it holds a password).
 REM ---------------------------------------------------------------------------
-setlocal
+setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
 set "CONN=%~1"
 if "%CONN%"=="" set "CONN=conn.txt"
 set "OUT=%~2"
-if "%OUT%"=="" set "OUT=site-live"
+if "%OUT%"=="" (
+  for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "(Get-Date).ToString('yyyyMMddHHmm')"`) do set "TIMESTAMP=%%i"
+  set "OUT=site-!TIMESTAMP!"
+)
 
 if not exist "%CONN%" (
   echo error: connection file "%CONN%" not found. Create it next to this script.

@@ -61,11 +61,29 @@ public static class SqlRules
             "Rename to a letter-led, space-free identifier."),
             CheckNonStandardNaming),
 
-        (new SqlRule("SQL0010", 3, "Maintainability", "Dead / unreferenced object",
-            "Nothing in this scan references this procedure, function, or trigger.",
-            "Confirm it's still called from application code, or remove it."),
+        (new SqlRule("SQL0010", 3, "Maintainability", "No static caller found",
+            "No object in this scan references this procedure/function/trigger, and it has no runtime "
+            + "execution recorded. It may still be invoked by application code or dynamic SQL.",
+            "Confirm it's still called externally, or remove it."),
             CheckDeadObjects),
+
+        (new SqlRule("SQL0011", 0, "Security", "Privileged / dangerous command",
+            "This object invokes a high-risk built-in (xp_cmdshell, OLE automation, or database mail) "
+            + "that can run OS commands, instantiate COM objects, or send data off the server.",
+            "Confirm the privilege is required; prefer a constrained alternative and least-privilege execution context."),
+            CheckDangerousCommands),
+
+        (new SqlRule("SQL0012", 2, "Schema", "Deprecated column type",
+            "text, ntext and image are deprecated (removed in modern SQL Server) and don't support "
+            + "many string/comparison operations.",
+            "Migrate text/ntext to varchar(max)/nvarchar(max) and image to varbinary(max)."),
+            CheckDeprecatedTypes),
     ];
+
+    private static readonly string[] DangerousCommands =
+        ["xp_cmdshell", "sp_oacreate", "sp_oamethod", "sp_oasetproperty", "sp_oagetproperty", "sp_oadestroy", "sp_oageterrorinfo", "sp_send_dbmail"];
+
+    private static readonly string[] DeprecatedColumnTypes = ["text", "ntext", "image"];
 
     public static List<LintFinding> Run(SqlModel model) =>
         Rules.SelectMany(r => r.Check(model)).ToList();
@@ -172,10 +190,56 @@ public static class SqlRules
             .Select(o => ForObject(model, o.Id, "SQL0009", 3, $"{o.Schema}.{o.Name} does not follow standard naming."))
             .ToList();
 
-    private static List<LintFinding> CheckDeadObjects(SqlModel model) =>
-        SqlMetrics.DeadObjects(model)
-            .Select(o => ForObject(model, o.Id, "SQL0010", 3, $"{o.Schema}.{o.Name} is not referenced anywhere in this scan."))
+    private static List<LintFinding> CheckDeadObjects(SqlModel model)
+    {
+        // An object that actually executed (runtime evidence) is provably live — never flag it,
+        // even if no static caller was found. This turns a false-positive-heavy signal into an
+        // actionable one on live-connection scans.
+        var executed = model.Runtime.Available
+            ? model.Runtime.ObjectStats.Select(s => s.ObjectId).ToHashSet(StringComparer.Ordinal)
+            : new HashSet<string>(StringComparer.Ordinal);
+        return SqlMetrics.DeadObjects(model)
+            .Where(o => !executed.Contains(o.Id))
+            .Select(o => ForObject(model, o.Id, "SQL0010", 3,
+                $"{o.Schema}.{o.Name} has no static caller in this scan and no recorded execution."))
             .ToList();
+    }
+
+    private static List<LintFinding> CheckDangerousCommands(SqlModel model)
+    {
+        var findings = new List<LintFinding>();
+        var seen = new HashSet<(string, string)>();
+        foreach (var d in model.Dependencies)
+        {
+            var target = (d.ExternalTarget.Length > 0 ? d.ExternalTarget : d.ToObjectId).ToLowerInvariant();
+            var hit = DangerousCommands.FirstOrDefault(c => target.Contains(c, StringComparison.Ordinal));
+            if (hit is null || !seen.Add((d.FromObjectId, hit))) { continue; }
+            findings.Add(ForObject(model, d.FromObjectId, "SQL0011", 0,
+                $"{ObjectName(model, d.FromObjectId)} invokes {hit}."));
+        }
+        return findings;
+    }
+
+    private static List<LintFinding> CheckDeprecatedTypes(SqlModel model)
+    {
+        var findings = new List<LintFinding>();
+        foreach (var o in model.Objects.Where(o => o.Kind == "table"))
+        {
+            foreach (var c in o.Columns)
+            {
+                var baseType = c.DataType.Split('(', 2)[0].Trim().ToLowerInvariant();
+                if (Array.IndexOf(DeprecatedColumnTypes, baseType) < 0) { continue; }
+                findings.Add(new LintFinding
+                {
+                    RuleId = "SQL0012", Severity = 2, ObjectId = o.Id, Slug = o.DefinedInSlug,
+                    Title = "Deprecated column type",
+                    Message = $"{o.Schema}.{o.Name}.{c.Name} uses deprecated type {baseType}.",
+                    Line = o.DefinedAtLine,
+                });
+            }
+        }
+        return findings;
+    }
 
     private static LintFinding ForObject(SqlModel model, string objectId, string ruleId, int severity, string message)
     {

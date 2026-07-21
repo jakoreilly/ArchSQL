@@ -97,19 +97,21 @@ public static class Pipeline
         model = DependencyResolver.Resolve(model);
         model = ApplyPurposeAndComplexity(model);
         model = model with { Crud = CrudMatrix.Build(model) };
-        model = model with { Findings = SqlRules.Run(model) };
 
         // Runtime facts join to resolved object ids, so enrich after the reduce and outside the
-        // parallel map. Only a live source supplies them; file scans leave Runtime empty.
+        // parallel map. Only a live source supplies them; file scans leave Runtime empty. Attached
+        // BEFORE SqlRules so rules can use runtime evidence (e.g. an object that actually executed
+        // is not "dead").
         if (source is IRuntimeStatsSource live)
         {
             model = model with { Runtime = live.ReadRuntime() };
         }
-
         if (options.ExcludePatterns.Count > 0 && model.Runtime.Available)
         {
             model = model with { Runtime = FilterRuntimeByExcludedIds(model) };
         }
+
+        model = model with { Findings = SqlRules.Run(model) };
         return model;
     }
 

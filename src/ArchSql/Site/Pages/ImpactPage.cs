@@ -97,7 +97,15 @@ this as a floor, not a ceiling.</p>
         if (!visited[from]) { visited[from] = true; queue.push([from, depth + 1, edges[i][1]]); }
       }
     }
-    hits.sort(function (a, b) { return a.depth !== b.depth ? a.depth - b.depth : (a.id < b.id ? -1 : a.id > b.id ? 1 : 0); });
+    // Within a depth band, order by real execution count (hottest first) when runtime data is
+    // present, so the dependents most likely to matter surface at the top of each band.
+    function execOf(id) { var m = meta[id]; return m && m[3] >= 0 ? m[3] : -1; }
+    hits.sort(function (a, b) {
+      if (a.depth !== b.depth) { return a.depth - b.depth; }
+      var ea = execOf(a.id), eb = execOf(b.id);
+      if (rt && ea !== eb) { return eb - ea; }
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+    });
     return { hits: hits, capped: capped };
   }
 
@@ -137,7 +145,9 @@ this as a floor, not a ceiling.</p>
       out.innerHTML = '<div class="panel empty-state"><div class="big">◇</div><p>Nothing in this scan depends on this object. It may still be used by application code or dynamic SQL outside these scripts.</p></div>';
       return;
     }
-    var html = '<p class="note">' + res.hits.length + ' dependent object(s).</p>';
+    var hotCount = rt ? res.hits.filter(function (h) { var m = meta[h.id]; return m && m[3] > 0; }).length : 0;
+    var html = '<p class="note">' + res.hits.length + ' dependent object(s)'
+      + (rt ? ', ' + hotCount + ' with recorded execution (hot).' : '.') + '</p>';
     html += '<table class="grid"><tr><th>Object</th><th>Kind</th><th>Depth</th><th>Via</th>' + (rt ? '<th>Executions</th>' : '') + '</tr>';
     res.hits.forEach(function (h) {
       var m = meta[h.id] || [h.id, "", "", -1];

@@ -66,21 +66,23 @@ public static class RuntimeAggregate
             .OrderByDescending(m => m.ImpactScore).ThenBy(m => m.ObjectId, StringComparer.Ordinal)
             .ToList();
 
-        var unusedCount = indexStats.Count(i => i.IsUnused);
-        var note = $"{objectStats.Count} object(s) with execution stats, {missingIndexes.Count} missing-index "
-            + $"suggestion(s), {unusedCount} unused index(es). {VolatilityNote}";
-
         // Two catalog/DMV rows can normalize to the same id on a messy schema; collapse them so
-        // downstream id-keyed lookups never see a duplicate.
-        return ModelNormalizer.DedupeRuntime(new RuntimeStats
+        // downstream id-keyed lookups never see a duplicate. Build the note AFTER dedup so its
+        // counts match the lists actually shipped.
+        var deduped = ModelNormalizer.DedupeRuntime(new RuntimeStats
         {
             Source = "live-mssql",
             Available = true,
-            Note = note,
             ObjectStats = objectStats,
             IndexStats = indexStats,
             MissingIndexes = missingIndexes,
         });
+        var unusedCount = deduped.IndexStats.Count(i => i.IsUnused);
+        return deduped with
+        {
+            Note = $"{deduped.ObjectStats.Count} object(s) with execution stats, {deduped.MissingIndexes.Count} "
+                + $"missing-index suggestion(s), {unusedCount} unused index(es). {VolatilityNote}",
+        };
     }
 
     private static string Id(string schema, string name) => IdentifierRules.NormalizeId(schema, name, "tsql");

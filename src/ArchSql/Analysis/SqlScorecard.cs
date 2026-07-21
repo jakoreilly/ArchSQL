@@ -79,7 +79,12 @@ public static class SqlScorecard
     {
         var candidates = model.Objects.Count(o => o.Kind is "procedure" or "function" or "trigger");
         if (candidates == 0) { return new Row("Dead / unreferenced objects", "n/a", Status.NA, "No procedures/functions/triggers scanned."); }
-        var dead = SqlMetrics.DeadObjects(model).Count;
+        // Objects with recorded runtime execution are provably live — exclude them so the count
+        // reflects genuine no-caller candidates, matching the lint rule (SQL0010).
+        var executed = model.Runtime.Available
+            ? model.Runtime.ObjectStats.Select(s => s.ObjectId).ToHashSet(StringComparer.Ordinal)
+            : new HashSet<string>(StringComparer.Ordinal);
+        var dead = SqlMetrics.DeadObjects(model).Count(o => !executed.Contains(o.Id));
         var ratio = (double)dead / candidates;
         var status = ratio <= 0.10 ? Status.Ok : ratio <= 0.30 ? Status.Watch : Status.Fail;
         return new Row("Dead / unreferenced objects", $"{dead}/{candidates}", status,

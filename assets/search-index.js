@@ -1,1 +1,0 @@
-window.ARCH_SEARCH_INDEX=[["object","dbo.Notes","table","files/live_dbo_Notes.html"],["file","live/dbo.Notes","file","files/live_dbo_Notes.html"]];

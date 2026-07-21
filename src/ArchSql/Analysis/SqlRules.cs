@@ -78,12 +78,73 @@ public static class SqlRules
             + "many string/comparison operations.",
             "Migrate text/ntext to varchar(max)/nvarchar(max) and image to varbinary(max)."),
             CheckDeprecatedTypes),
+
+        (new SqlRule("SQL0013", 2, "Performance", "Heap table (no clustered index)",
+            "A table with no clustered index stores rows in unordered heap pages, which typically "
+            + "hurts range scans, fragmentation, and maintenance compared to a clustered index.",
+            "Add a clustered index, usually on the primary key or the most common access path."),
+            CheckHeaps),
+
+        (new SqlRule("SQL0014", 2, "Performance", "Duplicate or overlapping index",
+            "Two indexes on the same table with identical or prefix-overlapping key columns cost "
+            + "extra storage and write overhead without adding read benefit.",
+            "Drop the redundant index, or narrow one so their coverage no longer overlaps."),
+            CheckDuplicateIndexes),
+
+        (new SqlRule("SQL0015", 3, "Schema", "Unbounded or very wide column",
+            $"A character/binary column with no length bound, or wider than {WideColumnCharThreshold} "
+            + "characters, can waste storage and force off-row storage or implicit conversions.",
+            "Bound the column to the width the data actually needs, or confirm the unbounded width is required."),
+            CheckWideColumns),
+
+        (new SqlRule("SQL0016", 3, "Performance", "Unused index",
+            "This index is maintained on every write but has never been read (seeks, scans, and "
+            + "lookups are all zero), based on the connected server's runtime counters.",
+            "Confirm across a full workload cycle, then drop it to remove write overhead."),
+            CheckUnusedIndexes),
+
+        (new SqlRule("SQL0017", 2, "Correctness", "NOLOCK / READ UNCOMMITTED hint",
+            "Reading under NOLOCK or READ UNCOMMITTED allows dirty, non-repeatable, or phantom reads "
+            + "— rows that were never committed, or duplicated/missing rows during a concurrent write.",
+            "Use the default isolation level, or a documented snapshot-based alternative if reduced blocking is required."),
+            CheckNolockHints),
+
+        (new SqlRule("SQL0018", 3, "Maintainability", "Cursor used",
+            "Cursors process one row at a time and are typically far slower than an equivalent "
+            + "set-based query, and are easy to leave open on an early exit path.",
+            "Rewrite as a set-based query where possible."),
+            CheckCursors),
+
+        (new SqlRule("SQL0019", 3, "Correctness", "@@IDENTITY used",
+            "@@IDENTITY returns the last identity value inserted in the current session by any table, "
+            + "including one inserted by a trigger — it can silently return the wrong table's value.",
+            "Use SCOPE_IDENTITY() to get the identity value from the current scope only."),
+            CheckAtAtIdentity),
+
+        (new SqlRule("SQL0020", 3, "Maintainability", "Missing SET NOCOUNT ON",
+            "Without SET NOCOUNT ON, each statement's row-count message is sent to the client, adding "
+            + "network round-trips that are wasted for a procedure the caller doesn't need counts from.",
+            "Add SET NOCOUNT ON at the start of the procedure body."),
+            CheckMissingSetNoCount),
+
+        (new SqlRule("SQL0021", 1, "Security", "EXECUTE AS in module",
+            "EXECUTE AS changes the effective permissions the rest of the module runs under, which "
+            + "can silently grant more access than the caller has.",
+            "Confirm the impersonated context is required and scoped as narrowly as possible."),
+            CheckExecuteAs),
     ];
 
     private static readonly string[] DangerousCommands =
         ["xp_cmdshell", "sp_oacreate", "sp_oamethod", "sp_oasetproperty", "sp_oagetproperty", "sp_oadestroy", "sp_oageterrorinfo", "sp_send_dbmail"];
 
     private static readonly string[] DeprecatedColumnTypes = ["text", "ntext", "image"];
+
+    /// <summary>Character-length threshold above which a bounded (non-max) string/binary column is
+    /// flagged as very wide.</summary>
+    private const int WideColumnCharThreshold = 4000;
+
+    private static readonly string[] DoubleByteTypes = ["nvarchar", "nchar"];
+    private static readonly string[] WidthCheckedTypes = ["varchar", "nvarchar", "char", "nchar", "varbinary", "binary"];
 
     public static List<LintFinding> Run(SqlModel model) =>
         Rules.SelectMany(r => r.Check(model)).ToList();
@@ -240,6 +301,75 @@ public static class SqlRules
         }
         return findings;
     }
+
+    private static List<LintFinding> CheckHeaps(SqlModel model) =>
+        IndexAnalysis.Heaps(model)
+            .Select(o => ForObject(model, o.Id, "SQL0013", 2, $"{o.Schema}.{o.Name} has no clustered index (heap)."))
+            .ToList();
+
+    private static List<LintFinding> CheckDuplicateIndexes(SqlModel model) =>
+        IndexAnalysis.DuplicateIndexes(model)
+            .Select(p => ForObject(model, p.ObjectId, "SQL0014", 2,
+                $"{ObjectName(model, p.ObjectId)} has indexes [{p.IndexA}] and [{p.IndexB}] with {p.Relationship}."))
+            .ToList();
+
+    private static List<LintFinding> CheckUnusedIndexes(SqlModel model) =>
+        IndexAnalysis.UnusedIndexes(model)
+            .Select(u => ForObject(model, u.ObjectId, "SQL0016", 3,
+                $"{ObjectName(model, u.ObjectId)} index [{u.IndexName}] has never been read ({u.UserUpdates} write(s) recorded)."))
+            .ToList();
+
+    private static List<LintFinding> CheckWideColumns(SqlModel model)
+    {
+        var findings = new List<LintFinding>();
+        foreach (var o in model.Objects.Where(o => o.Kind == "table"))
+        {
+            foreach (var c in o.Columns)
+            {
+                var baseType = c.DataType.Split('(', 2)[0].Trim().ToLowerInvariant();
+                if (Array.IndexOf(WidthCheckedTypes, baseType) < 0 || c.MaxLength == 0) { continue; }
+                if (c.MaxLength == -1)
+                {
+                    findings.Add(WideColumnFinding(o, c, $"{o.Schema}.{o.Name}.{c.Name} has no length bound ({baseType}(max))."));
+                    continue;
+                }
+                var chars = Array.IndexOf(DoubleByteTypes, baseType) >= 0 ? c.MaxLength / 2 : c.MaxLength;
+                if (chars > WideColumnCharThreshold)
+                {
+                    findings.Add(WideColumnFinding(o, c, $"{o.Schema}.{o.Name}.{c.Name} is {chars} characters wide."));
+                }
+            }
+        }
+        return findings;
+    }
+
+    private static LintFinding WideColumnFinding(DbObject o, Column c, string message) => new()
+    {
+        RuleId = "SQL0015", Severity = 3, ObjectId = o.Id, Slug = o.DefinedInSlug,
+        Title = "Unbounded or very wide column", Message = message, Line = o.DefinedAtLine,
+    };
+
+    private static List<LintFinding> CheckNolockHints(SqlModel model) => CheckCodeFlag(model, o => o.CodeFlags.UsesNolock,
+        "SQL0017", 2, o => $"{o.Schema}.{o.Name} reads with a NOLOCK / READ UNCOMMITTED hint.");
+
+    private static List<LintFinding> CheckCursors(SqlModel model) => CheckCodeFlag(model, o => o.CodeFlags.UsesCursor,
+        "SQL0018", 3, o => $"{o.Schema}.{o.Name} declares a cursor.");
+
+    private static List<LintFinding> CheckAtAtIdentity(SqlModel model) => CheckCodeFlag(model, o => o.CodeFlags.UsesAtAtIdentity,
+        "SQL0019", 3, o => $"{o.Schema}.{o.Name} uses @@IDENTITY.");
+
+    private static List<LintFinding> CheckExecuteAs(SqlModel model) => CheckCodeFlag(model, o => o.CodeFlags.UsesExecuteAs,
+        "SQL0021", 1, o => $"{o.Schema}.{o.Name} contains EXECUTE AS.");
+
+    private static List<LintFinding> CheckMissingSetNoCount(SqlModel model) =>
+        model.Objects.Where(o => o.Kind == "procedure" && !o.CodeFlags.HasSetNoCount)
+            .Select(o => ForObject(model, o.Id, "SQL0020", 3, $"{o.Schema}.{o.Name} does not SET NOCOUNT ON."))
+            .ToList();
+
+    private static List<LintFinding> CheckCodeFlag(SqlModel model, Func<DbObject, bool> hasFlag, string ruleId, int severity, Func<DbObject, string> message) =>
+        model.Objects.Where(o => o.Kind is "procedure" or "function" or "trigger" && hasFlag(o))
+            .Select(o => ForObject(model, o.Id, ruleId, severity, message(o)))
+            .ToList();
 
     private static LintFinding ForObject(SqlModel model, string objectId, string ruleId, int severity, string message)
     {

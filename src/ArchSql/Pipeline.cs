@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using ArchSql.Analysis;
 using ArchSql.Cli;
+using ArchSql.Live;
 using ArchSql.Model;
 
 namespace ArchSql;
@@ -60,8 +61,9 @@ public static class Pipeline
             }
         }
 
-        // Exclusion runs BEFORE dedup: a "_bak" copy excluded here never reaches the duplicate-id
-        // check, so it produces neither a false collision warning nor a dropped real object.
+        // Exclusion runs BEFORE dedup: an excluded object never reaches the duplicate-id check, so
+        // excluding a redundant copy produces neither a false collision warning nor a dropped
+        // surviving object.
         if (options.ExcludePatterns.Count > 0)
         {
             ApplyExclusions(options.ExcludePatterns, objects, foreignKeys, dependencies, diagnostics);
@@ -109,6 +111,13 @@ public static class Pipeline
         if (options.ExcludePatterns.Count > 0 && model.Runtime.Available)
         {
             model = model with { Runtime = FilterRuntimeByExcludedIds(model) };
+        }
+
+        // Column width/precision/collation, static index definitions, and row counts join to
+        // resolved objects by id, so merge after the reduce, same as runtime facts.
+        if (source is ICatalogDetailSource catalog)
+        {
+            model = CatalogDetailMerge.Merge(model, catalog.ReadCatalogDetail());
         }
 
         model = model with { Findings = SqlRules.Run(model) };

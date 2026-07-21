@@ -32,7 +32,12 @@ public static class DiffReport
         return sb.ToString();
     }
 
-    public static string RenderHtml(IReadOnlyList<SchemaChange> changes, IReadOnlySet<string> suppressed)
+    public static string RenderHtml(IReadOnlyList<SchemaChange> changes, IReadOnlySet<string> suppressed) =>
+        PageTemplate.Render("Schema Diff", "ArchSql", "", "", PageTemplate.Crumbs((null, "Schema Diff")), Body(changes, suppressed));
+
+    /// <summary>The report's inner body markup, without the page shell — reused by the standalone
+    /// diff verb (wrapped by RenderHtml) and by the site's Drift page (wrapped by SiteGenerator).</summary>
+    public static string Body(IReadOnlyList<SchemaChange> changes, IReadOnlySet<string> suppressed)
     {
         var sb = new StringBuilder();
         sb.Append("<h1>Schema Diff</h1>");
@@ -69,6 +74,6 @@ Safe = additive. Baselined changes are shown struck-through and don't fail the g
             }
             sb.Append("</table>");
         }
-        return PageTemplate.Render("Schema Diff", "ArchSql", "", "", PageTemplate.Crumbs((null, "Schema Diff")), sb.ToString());
+        return sb.ToString();
     }
 }

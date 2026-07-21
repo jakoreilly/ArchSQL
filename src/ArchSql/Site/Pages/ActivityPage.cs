@@ -48,7 +48,49 @@ page, reconnect with a login that has <code>VIEW DATABASE STATE</code>.</p>
         AppendHeatMap(sb, ctx, rt);
         AppendIndexIssues(sb, ctx, rt);
         AppendIssueConcentration(sb, model, rt);
+        AppendMaintenance(sb, ctx, rt);
         return sb.ToString();
+    }
+
+    private static void AppendMaintenance(StringBuilder sb, SiteContext ctx, RuntimeStats rt)
+    {
+        sb.Append("<h2>Maintenance</h2>");
+        var maintenance = rt.Maintenance;
+        if (!maintenance.Available)
+        {
+            sb.Append("""<div class="panel empty-state"><p>Maintenance data (backup age, statistics freshness, fragmentation) needs additional permission on the connected login.</p></div>""");
+            return;
+        }
+        sb.Append($"""<p class="note">{Html.Encode(maintenance.Note)}</p>""");
+
+        sb.Append("<div class=\"tiles\">");
+        var backupLabel = maintenance.DaysSinceLastBackup is { } d ? $"{d}" : "?";
+        sb.Append($"""<div class="tile{(maintenance.DaysSinceLastBackup is null or > 7 ? " tile-zero" : "")}"><div class="num">{backupLabel}</div><div class="lbl">Days since last backup</div></div>""");
+        sb.Append($"""<div class="tile{(maintenance.StaleStatistics.Count == 0 ? " tile-zero" : "")}"><div class="num">{maintenance.StaleStatistics.Count:N0}</div><div class="lbl">Stale statistics</div></div>""");
+        sb.Append($"""<div class="tile{(maintenance.FragmentedIndexes.Count == 0 ? " tile-zero" : "")}"><div class="num">{maintenance.FragmentedIndexes.Count:N0}</div><div class="lbl">Fragmented indexes</div></div>""");
+        sb.Append("</div>");
+
+        if (maintenance.FragmentedIndexes.Count > 0)
+        {
+            sb.Append("<h3>Fragmented indexes</h3>");
+            sb.Append("""<table class="grid sortable" data-page-size="20"><thead><tr><th>Table</th><th>Index</th><th>Fragmentation</th><th>Pages</th></tr></thead><tbody>""");
+            foreach (var f in maintenance.FragmentedIndexes)
+            {
+                sb.Append($"""<tr><td>{Html.Encode(Label(ctx, f.ObjectId))}</td><td>{Html.Encode(f.IndexName)}</td><td>{f.FragmentationPercent:0.0}%</td><td>{f.PageCount:N0}</td></tr>""");
+            }
+            sb.Append("</tbody></table>");
+        }
+
+        if (maintenance.StaleStatistics.Count > 0)
+        {
+            sb.Append("<h3>Oldest statistics</h3>");
+            sb.Append("""<table class="grid sortable" data-page-size="20"><thead><tr><th>Table</th><th>Statistics</th><th>Days since update</th></tr></thead><tbody>""");
+            foreach (var s in maintenance.StaleStatistics.Take(100))
+            {
+                sb.Append($"""<tr><td>{Html.Encode(Label(ctx, s.ObjectId))}</td><td>{Html.Encode(s.StatsName)}</td><td>{s.DaysSinceUpdate:N0}</td></tr>""");
+            }
+            sb.Append("</tbody></table>");
+        }
     }
 
     private static void AppendHotspots(StringBuilder sb, SiteContext ctx, RuntimeStats rt)

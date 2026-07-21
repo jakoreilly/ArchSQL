@@ -34,7 +34,21 @@ internal static class Verbs
         ModelJsonWriter.Write(model, modelPath);
         Console.Error.WriteLine($"Wrote {modelPath}");
 
-        var indexPath = Site.SiteGenerator.Generate(model, options.OutDir, options.MaxNodes);
+        List<SchemaChange>? drift = null;
+        if (options.BaselineModelPath is not null)
+        {
+            try
+            {
+                var baseline = ModelJsonReader.Read(options.BaselineModelPath);
+                drift = SchemaDiff.Compute(baseline, model);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or InvalidDataException)
+            {
+                Console.Error.WriteLine($"note: could not read baseline '{options.BaselineModelPath}': {ex.Message}. Continuing without a drift page.");
+            }
+        }
+
+        var indexPath = Site.SiteGenerator.Generate(model, options.OutDir, options.MaxNodes, drift);
 
         if (options.SarifPath is not null)
         {

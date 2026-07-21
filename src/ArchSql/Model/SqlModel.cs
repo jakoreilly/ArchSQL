@@ -4,7 +4,7 @@ namespace ArchSql.Model;
 /// bumps; ModelUpgrader.Upgrade backfills anything older.</summary>
 public static class SchemaVersions
 {
-    public const int Current = 3;
+    public const int Current = 5;
 }
 
 /// <summary>Root of everything ArchSql learned about a folder of SQL. Serialized verbatim to
@@ -62,6 +62,37 @@ public sealed record RuntimeStats
     public List<ObjectStat> ObjectStats { get; init; } = [];
     public List<IndexStat> IndexStats { get; init; } = [];
     public List<MissingIndex> MissingIndexes { get; init; } = [];
+    /// <summary>Backup, statistics-age, and fragmentation posture. Best-effort: each underlying
+    /// query degrades independently when the login lacks the needed permission.</summary>
+    public MaintenanceInfo Maintenance { get; init; } = new();
+}
+
+/// <summary>Maintenance/backup posture from msdb and physical-stats DMVs. Each piece is optional —
+/// a login may be able to read some of these and not others.</summary>
+public sealed record MaintenanceInfo
+{
+    public bool Available { get; init; }
+    public string Note { get; init; } = "";
+    /// <summary>Days since the most recent backup of any type for this database, or null when
+    /// backup history could not be read (commonly, no access to msdb).</summary>
+    public int? DaysSinceLastBackup { get; init; }
+    public List<StaleStatistic> StaleStatistics { get; init; } = [];
+    public List<FragmentedIndex> FragmentedIndexes { get; init; } = [];
+}
+
+public sealed record StaleStatistic
+{
+    public required string ObjectId { get; init; }
+    public required string StatsName { get; init; }
+    public int DaysSinceUpdate { get; init; }
+}
+
+public sealed record FragmentedIndex
+{
+    public required string ObjectId { get; init; }
+    public required string IndexName { get; init; }
+    public double FragmentationPercent { get; init; }
+    public long PageCount { get; init; }
 }
 
 /// <summary>Per-object execution counters (procedures/functions) from sys.dm_exec_procedure_stats.</summary>
@@ -137,6 +168,18 @@ public sealed record DbObject
     public int StatementCount { get; init; }
     /// <summary>Verbatim source slice, for the formatter and the detail page.</summary>
     public string Body { get; init; } = "";
+    /// <summary>Static index catalog detail (name, key/included columns, uniqueness, clustering).
+    /// Empty for file scans and for kinds other than table. Populated from a live connection only;
+    /// distinct from Indexes (name+column-list strings the analyzer parses from CREATE TABLE).</summary>
+    public List<IndexDef> IndexDetails { get; init; } = [];
+    /// <summary>Row count from partition statistics. 0 when not captured (file scan, or the login
+    /// lacks permission to read it).</summary>
+    public long RowCount { get; init; }
+    /// <summary>Reserved storage in kilobytes, from partition statistics. 0 when not captured.</summary>
+    public long ReservedKb { get; init; }
+    /// <summary>Body-level code characteristics detected during analysis (Phase C1). Absent
+    /// (all false) when the object has no body or wasn't deep-parsed.</summary>
+    public CodeFlags CodeFlags { get; init; } = new();
 }
 
 public sealed record Column
@@ -146,6 +189,38 @@ public sealed record Column
     public bool Nullable { get; init; } = true;
     public bool IsIdentity { get; init; }
     public string Default { get; init; } = "";
+    /// <summary>Catalog max_length in bytes as reported by SQL Server; -1 means (max). 0 when not
+    /// captured (file scan). See SqlTypeText for the byte-to-character conversion for n-types.</summary>
+    public int MaxLength { get; init; }
+    public byte Precision { get; init; }
+    public byte Scale { get; init; }
+    /// <summary>Column collation name, or "" when not applicable/captured.</summary>
+    public string Collation { get; init; } = "";
+}
+
+/// <summary>One index on a table, from the static catalog (sys.indexes/sys.index_columns) rather
+/// than runtime usage (see IndexStat for DMV usage counters, which join to this by ObjectId+Name).</summary>
+public sealed record IndexDef
+{
+    public required string Name { get; init; }
+    public required string ObjectId { get; init; }
+    public List<string> KeyColumns { get; init; } = [];
+    public List<string> IncludedColumns { get; init; } = [];
+    public bool IsUnique { get; init; }
+    public bool IsPrimaryKey { get; init; }
+    public bool IsClustered { get; init; }
+    public bool IsDisabled { get; init; }
+}
+
+/// <summary>Body-level code characteristics detected while parsing a procedure/function/trigger.
+/// Each flag is a single pass over the already-parsed AST/token stream — no second parse.</summary>
+public sealed record CodeFlags
+{
+    public bool UsesNolock { get; init; }
+    public bool UsesCursor { get; init; }
+    public bool UsesAtAtIdentity { get; init; }
+    public bool HasSetNoCount { get; init; }
+    public bool UsesExecuteAs { get; init; }
 }
 
 public sealed record ForeignKey

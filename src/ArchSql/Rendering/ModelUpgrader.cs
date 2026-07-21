@@ -17,8 +17,9 @@ public static class ModelUpgrader
                 + $"({SchemaVersions.Current}). Upgrade ArchSql.");
         }
 
-        // v0/v1 -> v2 added Crud; v2 -> v3 added Runtime. Both are default-initialized on
-        // deserialize (Crud to [], Runtime to an empty RuntimeStats with Available=false), so
+        // v0/v1 -> v2 added Crud; v2 -> v3 added Runtime; v3 -> v4 added column detail, index
+        // detail, row counts, and code flags; v4 -> v5 added maintenance/backup posture. All are
+        // default-initialized on deserialize (empty collections, zero values, Available=false), so
         // nothing needs backfilling — stamp the version forward.
         var upgraded = model.SchemaVersion == SchemaVersions.Current ? model : model with { SchemaVersion = SchemaVersions.Current };
 

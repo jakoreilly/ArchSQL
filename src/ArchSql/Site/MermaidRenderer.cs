@@ -35,6 +35,31 @@ public static class MermaidRenderer
         return trimmed ? sb.ToString() + $"\n%% showing {shown.Count} of {tables.Count} tables (most-connected first)\n" : sb.ToString();
     }
 
+    /// <summary>Logical ER built from InferredRelationships rather than declared foreign keys —
+    /// for a database where referential integrity is not declared, this is often the only view of
+    /// how tables actually relate. Inferred edges are drawn dashed (non-identifying) to distinguish
+    /// them from a real, declared foreign key.</summary>
+    public static string BuildInferredEr(SqlModel model, List<Analysis.InferredRelationships.Relationship> relationships, int maxNodes)
+    {
+        var tables = model.Objects.Where(o => o.Kind == "table").ToList();
+        var touched = relationships.SelectMany(r => new[] { r.FromObjectId, r.ToObjectId }).ToHashSet(StringComparer.Ordinal);
+        var candidates = tables.Where(t => touched.Contains(t.Id)).ToList();
+        var (shown, trimmed) = Cap(candidates.Count > 0 ? candidates : tables, relationships, maxNodes);
+        var shownIds = shown.Select(t => t.Id).ToHashSet(StringComparer.Ordinal);
+
+        var sb = new StringBuilder();
+        sb.Append("erDiagram\n");
+        foreach (var t in shown)
+        {
+            sb.Append($"  {SafeId(t.Id)}[\"{Escape(t.Schema)}.{Escape(t.Name)}\"] {{\n    string _ \"\"\n  }}\n");
+        }
+        foreach (var r in relationships.Where(r => shownIds.Contains(r.FromObjectId) && shownIds.Contains(r.ToObjectId)))
+        {
+            sb.Append($"  {SafeId(r.ToObjectId)} |o..o{{ {SafeId(r.FromObjectId)} : \"{Escape(r.FromColumn)} ({r.Confidence})\"\n");
+        }
+        return trimmed ? sb.ToString() + $"\n%% showing {shown.Count} of {candidates.Count} related tables (most-connected first)\n" : sb.ToString();
+    }
+
     public static string BuildDependencies(SqlModel model, int maxNodes)
     {
         var objects = model.Objects;
@@ -73,6 +98,7 @@ public static class MermaidRenderer
             {
                 ForeignKey fk => (fk.FromObjectId, fk.ToObjectId),
                 ObjectDep d => (d.FromObjectId, d.ToObjectId),
+                Analysis.InferredRelationships.Relationship r => (r.FromObjectId, r.ToObjectId),
                 _ => ("", ""),
             };
             if (touch.ContainsKey(from)) { touch[from]++; }

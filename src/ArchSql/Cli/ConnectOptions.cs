@@ -1,9 +1,10 @@
+using Microsoft.Data.SqlClient;
+
 namespace ArchSql.Cli;
 
 /// <summary>Parses the `connect` verb into a CliOptions carrying a connection string. The string
 /// is read from a file (--conn-file) or the ARCHSQL_CONNECTION env var (--env), never from a bare
-/// CLI argument, so it does not land in shell history (Hard Constraint: connection string is a
-/// secret).</summary>
+/// CLI argument, so it does not land in shell history (the connection string is a secret).</summary>
 public static class ConnectOptions
 {
     private const string EnvVar = "ARCHSQL_CONNECTION";
@@ -20,6 +21,7 @@ public static class ConnectOptions
         var failOn = new List<string>();
         var excludePatterns = new List<string>();
         string? configPath = null;
+        string? baselinePath = null;
 
         for (var i = 1; i < args.Length; i++)
         {
@@ -34,6 +36,7 @@ public static class ConnectOptions
                 case "--fail-on" when i + 1 < args.Length: failOn.AddRange(args[++i].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)); break;
                 case "--exclude-pattern" when i + 1 < args.Length: excludePatterns.Add(args[++i]); break;
                 case "--config" when i + 1 < args.Length: configPath = args[++i]; break;
+                case "--baseline" when i + 1 < args.Length: baselinePath = args[++i]; break;
                 default:
                     Console.Error.WriteLine($"error: unknown argument '{args[i]}'.");
                     exitCode = 2;
@@ -43,7 +46,7 @@ public static class ConnectOptions
 
         if (connFile is null == !useEnv)
         {
-            Console.Error.WriteLine("Usage: archsql connect (--conn-file <path> | --env) [--out <dir>] [--timeout <sec>] [--no-open] [--max-nodes <n>] [--fail-on <gate>...]");
+            Console.Error.WriteLine("Usage: archsql connect (--conn-file <path> | --env) [--out <dir>] [--timeout <sec>] [--no-open] [--max-nodes <n>] [--fail-on <gate>...] [--baseline <model.json>]");
             Console.Error.WriteLine($"  Provide the connection string via a file (--conn-file) or the {EnvVar} environment variable (--env) — never as a plain argument.");
             exitCode = 2;
             return null;
@@ -65,18 +68,50 @@ public static class ConnectOptions
             return null;
         }
 
+        // Derive the target database name so the root label and default output directory are
+        // unique per connection — running against a different database does not overwrite a
+        // previous site.
+        var dbName = DatabaseName(connectionString);
+        var defaultOut = "site-db-" + Slugify(dbName);
+
         return new CliOptions
         {
-            SourcePath = "live-db",
+            SourcePath = dbName,
             ConnectionString = connectionString,
             TimeoutSeconds = timeout,
-            OutDir = Path.GetFullPath(outDir ?? "site-live", Environment.CurrentDirectory),
+            OutDir = Path.GetFullPath(outDir ?? defaultOut, Environment.CurrentDirectory),
             Open = open,
             MaxNodes = maxNodes,
             ForceDialect = "tsql",
             FailOn = failOn,
             ExcludePatterns = config.ExcludePatterns.Concat(excludePatterns).ToList(),
+            BaselineModelPath = baselinePath,
         };
+    }
+
+    /// <summary>The target database (initial catalog) from a connection string, or a neutral
+    /// fallback when it is absent or unparseable. Parsing must never throw.</summary>
+    private static string DatabaseName(string connectionString)
+    {
+        try
+        {
+            var db = new SqlConnectionStringBuilder(connectionString).InitialCatalog;
+            return string.IsNullOrWhiteSpace(db) ? "database" : db;
+        }
+        catch (ArgumentException) { return "database"; }
+    }
+
+    /// <summary>Lowercases and replaces any character outside [a-z0-9._-] with '-' so the name is
+    /// safe as a directory segment.</summary>
+    private static string Slugify(string name)
+    {
+        var sb = new System.Text.StringBuilder(name.Length);
+        foreach (var ch in name.ToLowerInvariant())
+        {
+            sb.Append(char.IsLetterOrDigit(ch) || ch is '.' or '_' or '-' ? ch : '-');
+        }
+        var slug = sb.ToString().Trim('-', '.');
+        return slug.Length == 0 ? "database" : slug;
     }
 
     private static string? ReadConnectionString(string? connFile, bool useEnv, out string error)

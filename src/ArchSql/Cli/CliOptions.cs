@@ -22,15 +22,17 @@ public sealed record CliOptions
     /// <summary>Glob patterns (object name or schema.name id) excluded from the model before dedup.
     /// Combines archsql.config.json's excludePatterns with any --exclude-pattern flags.</summary>
     public List<string> ExcludePatterns { get; init; } = [];
+    /// <summary>Path to an earlier scan's model.json to diff against; null = no drift page.</summary>
+    public string? BaselineModelPath { get; init; }
 
     public static CliOptions? Parse(string[] args, out int exitCode)
     {
         exitCode = 0;
         if (args.Length == 0 || args[0] is "-h" or "--help")
         {
-            Console.Error.WriteLine("Usage: archsql <path-to-folder> [--out <dir>] [--no-open] [--max-nodes <n>] [--exclude <dirname>]... [--exclude-pattern <glob>]... [--config <path>] [--dialect <tsql|mysql|postgres|auto>] [--fail-on <gate>[,<gate>...]] [--sarif <path>]");
+            Console.Error.WriteLine("Usage: archsql <path-to-folder> [--out <dir>] [--no-open] [--max-nodes <n>] [--exclude <dirname>]... [--exclude-pattern <glob>]... [--config <path>] [--dialect <tsql|mysql|postgres|auto>] [--fail-on <gate>[,<gate>...]] [--sarif <path>] [--baseline <model.json>]");
             Console.Error.WriteLine($"  --fail-on gates: {string.Join(", ", Analysis.SqlCiGate.KnownGates.Keys.OrderBy(k => k, StringComparer.Ordinal))}. On a tripped gate the site is still written and the process exits 3 (2 = usage error, 1 = crash).");
-            Console.Error.WriteLine("  --exclude-pattern: a glob (e.g. '*_bak', '*_BAK', 'tmp_*') matched against object name/id, dropped from the model before analysis. Repeatable; also read from archsql.config.json's excludePatterns.");
+            Console.Error.WriteLine("  --exclude-pattern: a glob ('*' and '?') matched against each object's name and id; matches are dropped from the model before analysis. Repeatable; also read from archsql.config.json's excludePatterns.");
             exitCode = args.Length == 0 ? 2 : 0;
             return null;
         }
@@ -52,6 +54,7 @@ public sealed record CliOptions
         string? sarifPath = null;
         var excludePatterns = new List<string>();
         string? configPath = null;
+        string? baselinePath = null;
 
         // Flags grouped by shape (no-value boolean vs. single-value), one branch per SHAPE
         // rather than one per flag (keeps cognitive complexity low — copies CliOptions.Parse
@@ -69,6 +72,7 @@ public sealed record CliOptions
             ["--config"] = v => configPath = v,
             ["--dialect"] = v => dialect = v,
             ["--sarif"] = v => sarifPath = v,
+            ["--baseline"] = v => baselinePath = v,
         };
 
         for (var i = 1; i < args.Length; i++)
@@ -117,6 +121,7 @@ public sealed record CliOptions
             ForceDialect = dialect,
             FailOn = failOn,
             SarifPath = sarifPath,
+            BaselineModelPath = baselinePath,
         };
     }
 

@@ -3,7 +3,7 @@ using ArchSql.Model;
 namespace ArchSql.Analysis;
 
 /// <summary>Groups objects into likely bounded contexts by name prefix (the first underscore-
-/// delimited token, e.g. UCI_, OR_, CPRS_, _Maintenance_). Flat single-schema databases encode
+/// delimited token). Flat single-schema databases encode
 /// their domains in naming; this makes that structure visible and measures cross-domain coupling.
 /// Pure and deterministic.</summary>
 public static class DomainGrouping
@@ -13,7 +13,7 @@ public static class DomainGrouping
     public sealed record Result(List<Domain> Domains, List<CrossEdge> CrossEdges);
 
     /// <summary>The domain bucket for an object name: the first non-empty underscore-delimited
-    /// token (so "UCI_Parking_X" -> "UCI", "_Maintenance_Y" -> "Maintenance"), else "(ungrouped)".</summary>
+    /// token, else "(ungrouped)".</summary>
     public static string DomainOf(string name)
     {
         foreach (var token in name.Split('_', StringSplitOptions.RemoveEmptyEntries))

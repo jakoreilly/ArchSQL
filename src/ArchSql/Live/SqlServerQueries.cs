@@ -14,12 +14,36 @@ internal static class SqlServerQueries
         SELECT s.name AS SchemaName, t.name AS TableName, c.name AS ColumnName,
                ty.name AS TypeName, c.max_length AS MaxLength, c.precision AS Prec,
                c.scale AS Scale, c.is_nullable AS IsNullable, c.is_identity AS IsIdentity,
-               c.column_id AS Ordinal
+               c.column_id AS Ordinal, ISNULL(c.collation_name, '') AS Collation
         FROM sys.columns c
         JOIN sys.tables t ON t.object_id = c.object_id
         JOIN sys.schemas s ON s.schema_id = t.schema_id
         JOIN sys.types ty ON ty.user_type_id = c.user_type_id
         ORDER BY s.name, t.name, c.column_id;
+        """;
+
+    public const string IndexInventory = """
+        SELECT s.name AS SchemaName, t.name AS TableName, ix.name AS IndexName,
+               ix.is_unique AS IsUnique, ix.is_primary_key AS IsPrimaryKey,
+               ix.type_desc AS TypeDesc, ix.is_disabled AS IsDisabled,
+               c.name AS ColumnName, ic.key_ordinal AS KeyOrdinal, ic.is_included_column AS IsIncluded
+        FROM sys.indexes ix
+        JOIN sys.tables t ON t.object_id = ix.object_id
+        JOIN sys.schemas s ON s.schema_id = t.schema_id
+        JOIN sys.index_columns ic ON ic.object_id = ix.object_id AND ic.index_id = ix.index_id
+        JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+        WHERE ix.name IS NOT NULL
+        ORDER BY s.name, t.name, ix.name, ic.key_ordinal;
+        """;
+
+    public const string TableStats = """
+        SELECT s.name AS SchemaName, t.name AS TableName,
+               SUM(CASE WHEN ps.index_id IN (0,1) THEN ps.row_count ELSE 0 END) AS Rows,
+               SUM(ps.reserved_page_count) * 8 AS ReservedKb
+        FROM sys.dm_db_partition_stats ps
+        JOIN sys.tables t ON t.object_id = ps.object_id
+        JOIN sys.schemas s ON s.schema_id = t.schema_id
+        GROUP BY s.name, t.name;
         """;
 
     public const string PrimaryKeys = """
@@ -76,6 +100,33 @@ internal static class SqlServerQueries
         LEFT JOIN sys.dm_db_index_usage_stats us
                ON us.object_id = ix.object_id AND us.index_id = ix.index_id AND us.database_id = DB_ID()
         WHERE ix.name IS NOT NULL;
+        """;
+
+    public const string LastBackup = """
+        SELECT backup_finish_date AS BackupFinishDate
+        FROM msdb.dbo.backupset
+        WHERE database_name = DB_NAME()
+        ORDER BY backup_finish_date DESC;
+        """;
+
+    public const string StatsAge = """
+        SELECT s.name AS SchemaName, t.name AS TableName, st.name AS StatsName,
+               sp.last_updated AS LastUpdated
+        FROM sys.stats st
+        JOIN sys.tables t ON t.object_id = st.object_id
+        JOIN sys.schemas s ON s.schema_id = t.schema_id
+        CROSS APPLY sys.dm_db_stats_properties(st.object_id, st.stats_id) sp
+        WHERE sp.last_updated IS NOT NULL;
+        """;
+
+    public const string Fragmentation = """
+        SELECT s.name AS SchemaName, t.name AS TableName, ix.name AS IndexName,
+               ps.avg_fragmentation_in_percent AS FragPct, ps.page_count AS PageCount
+        FROM sys.dm_db_index_physical_stats(DB_ID(), NULL, NULL, NULL, 'LIMITED') ps
+        JOIN sys.tables t ON t.object_id = ps.object_id
+        JOIN sys.schemas s ON s.schema_id = t.schema_id
+        JOIN sys.indexes ix ON ix.object_id = ps.object_id AND ix.index_id = ps.index_id
+        WHERE ps.index_id > 0 AND ps.page_count > 100;
         """;
 
     public const string MissingIndexes = """

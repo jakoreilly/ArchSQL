@@ -91,9 +91,8 @@ internal sealed class TSqlFactsVisitor(string relPath) : TSqlFragmentVisitor
         _statementCount++;
         var (schema, name) = SplitSchemaObjectName(node.SchemaObjectName);
         // Temp tables (#name, ##name) and table variables are session-local, not schema objects.
-        // They are declared inside procedure bodies and reuse common names (#tmp, #tmpdeleted), so
-        // emitting them would both pollute the inventory and collide when two modules use the same
-        // name — the resolver keys objects by id and cannot hold duplicates.
+        // They are declared inside procedure bodies and frequently reuse the same names across
+        // modules, so emitting them would pollute the inventory and collide on the id-keyed model.
         if (name.Length == 0 || IsTempOrVariable(name)) { return; }
         var id = IdentifierRules.NormalizeId(schema, name, "tsql");
         var columns = new List<Column>();
@@ -186,10 +185,12 @@ internal sealed class TSqlFactsVisitor(string relPath) : TSqlFragmentVisitor
         var (schema, name) = SplitSchemaObjectName(node.ProcedureReference.Name);
         var id = IdentifierRules.NormalizeId(schema, name, "tsql");
         DetectCredentialAndInjection(node, id);
+        var source = SourceOf(node);
         _objects.Add(new DbObject
         {
             Id = id, Schema = schema, Name = name, Kind = "procedure", Dialect = "tsql",
-            DefinedInSlug = relPath, DefinedAtLine = LineOf(node), Cyclomatic = SqlMetrics.Cyclomatic(SourceOf(node)),
+            DefinedInSlug = relPath, DefinedAtLine = LineOf(node), Cyclomatic = SqlMetrics.Cyclomatic(source),
+            CodeFlags = CodeFlagsScanner.Scan(source),
         });
         WithCurrentObject(id, () =>
         {
@@ -202,10 +203,12 @@ internal sealed class TSqlFactsVisitor(string relPath) : TSqlFragmentVisitor
         _statementCount++;
         var (schema, name) = SplitSchemaObjectName(node.Name);
         var id = IdentifierRules.NormalizeId(schema, name, "tsql");
+        var source = SourceOf(node);
         _objects.Add(new DbObject
         {
             Id = id, Schema = schema, Name = name, Kind = "function", Dialect = "tsql",
-            DefinedInSlug = relPath, DefinedAtLine = LineOf(node), Cyclomatic = SqlMetrics.Cyclomatic(SourceOf(node)),
+            DefinedInSlug = relPath, DefinedAtLine = LineOf(node), Cyclomatic = SqlMetrics.Cyclomatic(source),
+            CodeFlags = CodeFlagsScanner.Scan(source),
         });
         WithCurrentObject(id, () => node.AcceptChildren(this));
     }
@@ -215,10 +218,12 @@ internal sealed class TSqlFactsVisitor(string relPath) : TSqlFragmentVisitor
         _statementCount++;
         var (schema, name) = node.Name is not null ? SplitSchemaObjectName(node.Name) : ("dbo", "");
         var id = IdentifierRules.NormalizeId(schema, name, "tsql");
+        var source = SourceOf(node);
         _objects.Add(new DbObject
         {
             Id = id, Schema = schema, Name = name, Kind = "trigger", Dialect = "tsql",
-            DefinedInSlug = relPath, DefinedAtLine = LineOf(node), Cyclomatic = SqlMetrics.Cyclomatic(SourceOf(node)),
+            DefinedInSlug = relPath, DefinedAtLine = LineOf(node), Cyclomatic = SqlMetrics.Cyclomatic(source),
+            CodeFlags = CodeFlagsScanner.Scan(source),
         });
         WithCurrentObject(id, () =>
         {
@@ -302,10 +307,10 @@ internal sealed class TSqlFactsVisitor(string relPath) : TSqlFragmentVisitor
     }
 
     // Tracks the raw DML target node RecordDmlTarget already handled, so the generic child
-    // traversal doesn't ALSO visit it as an ordinary NamedTableReference. This matters most for
-    // "UPDATE o SET ... FROM Orders AS o": the Target's SchemaObject there is literally the alias
-    // "o" (1 part), and without this guard the traversal would record a bogus read dependency on a
-    // table named "o" alongside the correctly alias-resolved write to dbo.orders.
+    // traversal doesn't ALSO visit it as an ordinary NamedTableReference. This matters most for an
+    // UPDATE/DELETE whose target is written through a FROM-clause alias: the target's SchemaObject
+    // is then the single-part alias, and without this guard the traversal would record a bogus read
+    // dependency on a table with the alias's name alongside the correctly resolved write target.
     //
     // GOTCHA: TSqlFragmentVisitor's base ExplicitVisit(T) always calls Visit(node) and THEN
     // unconditionally calls node.AcceptChildren(this) itself, regardless of what Visit() does. So

@@ -15,13 +15,13 @@ public class Phase7_FoundationTests
     }
 
     [Fact]
-    public void ModelUpgrader_V2ModelGetsEmptyRuntimeAndVersion3()
+    public void ModelUpgrader_V2ModelGetsEmptyRuntimeAndCurrentVersion()
     {
-        // A v2 model predates the Runtime field; on load it must upgrade to v3 with an empty,
-        // unavailable RuntimeStats rather than null.
+        // A v2 model predates the Runtime field; on load it must upgrade to the current version
+        // with an empty, unavailable RuntimeStats rather than null.
         var model = new SqlModel { RootName = "x", SourcePath = "x", SchemaVersion = 2 };
         var upgraded = ModelUpgrader.Upgrade(model);
-        Assert.Equal(3, upgraded.SchemaVersion);
+        Assert.Equal(SchemaVersions.Current, upgraded.SchemaVersion);
         Assert.NotNull(upgraded.Runtime);
         Assert.False(upgraded.Runtime.Available);
         Assert.Empty(upgraded.Runtime.ObjectStats);
